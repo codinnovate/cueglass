@@ -1,0 +1,86 @@
+name: Smarty
+options:
+  bundleIdPrefix: com.smarty
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGN_IDENTITY: "Apple Development"
+    # Personal Apple Development team — required so Screen Recording TCC persists across builds.
+    # Ad-hoc signing ("-") makes macOS treat every rebuild as a new app and re-prompt forever.
+    DEVELOPMENT_TEAM: 9WHCDKVKJQ
+    ENABLE_HARDENED_RUNTIME: YES
+    COMBINE_HIDPI_IMAGES: YES
+targets:
+  Smarty:
+    type: application
+    platform: macOS
+    sources:
+      - path: Smarty
+        excludes:
+          - Resources/Info.plist
+          - Resources/Smarty.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.smarty.app
+        PRODUCT_NAME: Smarty
+        INFOPLIST_FILE: Smarty/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Smarty/Resources/Smarty.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_EMIT_LOC_STRINGS: YES
+        ENABLE_PREVIEWS: YES
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_TESTABILITY: YES
+        CODE_SIGN_IDENTITY: "Apple Development"
+        DEVELOPMENT_TEAM: 9WHCDKVKJQ
+        CODE_SIGN_STYLE: Automatic
+    info:
+      path: Smarty/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Cueglass
+        CFBundleName: Cueglass
+        CFBundleShortVersionString: "1.0.0"
+        CFBundleVersion: "1"
+        LSMinimumSystemVersion: "14.0"
+        LSApplicationCategoryType: public.app-category.productivity
+        LSUIElement: true
+        NSPrincipalClass: NSApplication
+        NSHighResolutionCapable: true
+        NSMicrophoneUsageDescription: Cueglass listens to your microphone to transcribe interview questions and generate helpful responses.
+        NSSpeechRecognitionUsageDescription: Cueglass uses speech recognition to understand interview questions in real time.
+        NSScreenCaptureUsageDescription: Cueglass captures your screen to read interview questions and coding problems via OCR. Frames are processed in memory and never saved.
+        NSAudioCaptureUsageDescription: Cueglass captures microphone audio to transcribe interview questions.
+    entitlements:
+      path: Smarty/Resources/Smarty.entitlements
+      properties:
+        com.apple.security.device.audio-input: true
+        com.apple.security.network.client: true
+    scheme:
+      testTargets:
+        - SmartyTests
+  SmartyTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: SmartyTests
+    dependencies:
+      - target: Smarty
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.smarty.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/../Frameworks"
+          - "@loader_path/../Frameworks"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Smarty.app/Contents/MacOS/Smarty"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+    scheme: {}

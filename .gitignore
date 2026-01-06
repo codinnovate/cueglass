@@ -1,0 +1,86 @@
+# Xcode
+DerivedData/
+.derivedData/
+build/
+*.xcuserstate
+xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.xccheckout
+*.xcscmblueprint
+*.xcworkspace/xcuserdata/
+
+# macOS
+.DS_Store
+**/.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# Swift / SPM
+.swiftpm/
+.build/
+Packages/
+Package.resolved
+*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+
+# Secrets / API keys / credentials — NEVER commit these
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.p8
+*.key
+*.cer
+*.crt
+secrets/
+Secrets/
+**/Secrets.plist
+**/secrets.json
+**/credentials.json
+**/api-keys.json
+**/apikeys.json
+**/*secret*
+**/*credentials*
+**/OpenAI.key
+**/openai.key
+**/.openai*
+**/Config.local.swift
+**/LocalConfig.swift
+**/DebugSecrets.swift
+xcconfig/*.local.xcconfig
+*.local.xcconfig
+
+# Keychain exports / auth dumps
+*.keychain
+*.keychain-db
+
+# Cursor / IDE
+.cursor/
+.vscode/
+*.swp
+*~
+.idea/
+
+# Logs & temp
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+
+# Test artifacts
+TestResults/
+*.xcresult
+
+# Fastlane / signing (if added later)
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output/
+*.mobileprovision
