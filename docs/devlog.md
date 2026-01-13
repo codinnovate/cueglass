@@ -1,0 +1,1 @@
+- 2026-01-13: Expand .gitignore to block env files, keys, and local secrets
