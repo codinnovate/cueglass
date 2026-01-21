@@ -1,2 +1,3 @@
 - 2026-01-13: Expand .gitignore to block env files, keys, and local secrets
 - 2026-01-20: Capture frames on interval and keep them in-memory only
+- 2026-01-21: Exclude Cueglass windows from the capture filter
