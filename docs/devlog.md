@@ -3,3 +3,4 @@
 - 2026-01-21: Exclude Cueglass windows from the capture filter
 - 2026-01-26: Settings: capture interval and display picker
 - 2026-01-28: Handle display disconnect and stream restart
+- 2026-01-30: Fix capture teardown race on session stop
