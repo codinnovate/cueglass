@@ -5,3 +5,4 @@
 - 2026-01-28: Handle display disconnect and stream restart
 - 2026-01-30: Fix capture teardown race on session stop
 - 2026-02-03: Add capture health status to the main window
+- 2026-02-04: Document screen-share invisibility limitations in README
