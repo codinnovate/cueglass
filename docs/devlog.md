@@ -7,3 +7,4 @@
 - 2026-02-03: Add capture health status to the main window
 - 2026-02-04: Document screen-share invisibility limitations in README
 - 2026-02-06: Integration smoke tests for capture start/stop lifecycle
+- 2026-02-09: Transcribe microphone audio into interim and final text
