@@ -8,3 +8,4 @@
 - 2026-02-04: Document screen-share invisibility limitations in README
 - 2026-02-06: Integration smoke tests for capture start/stop lifecycle
 - 2026-02-09: Transcribe microphone audio into interim and final text
+- 2026-02-12: Introduce Whisper vs Stream assistant modes
