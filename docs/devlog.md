@@ -10,3 +10,4 @@
 - 2026-02-09: Transcribe microphone audio into interim and final text
 - 2026-02-12: Introduce Whisper vs Stream assistant modes
 - 2026-02-17: Settings: microphone picker and pause detection slider
+- 2026-02-24: Fix audio session restart after permission grant
