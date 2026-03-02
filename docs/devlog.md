@@ -12,3 +12,4 @@
 - 2026-02-17: Settings: microphone picker and pause detection slider
 - 2026-02-24: Fix audio session restart after permission grant
 - 2026-02-25: Debounce rapid interim transcripts before prompting
+- 2026-03-02: Stream SSE tokens into the answer buffer
