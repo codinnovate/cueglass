@@ -14,3 +14,4 @@
 - 2026-02-25: Debounce rapid interim transcripts before prompting
 - 2026-03-02: Stream SSE tokens into the answer buffer
 - 2026-03-03: Non-streaming completion path for reliability fallback
+- 2026-03-05: ContextStore with token budget trimming
