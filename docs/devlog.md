@@ -16,3 +16,4 @@
 - 2026-03-03: Non-streaming completion path for reliability fallback
 - 2026-03-05: ContextStore with token budget trimming
 - 2026-03-06: InlineTechnicalExplanationFormat rules for coding answers
+- 2026-03-12: Rate-limit min request interval to avoid burst spend
