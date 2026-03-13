@@ -12,3 +12,8 @@
 - 2026-02-17: Settings: microphone picker and pause detection slider
 - 2026-02-24: Fix audio session restart after permission grant
 - 2026-02-25: Debounce rapid interim transcripts before prompting
+- 2026-03-02: Stream SSE tokens into the answer buffer
+- 2026-03-03: Non-streaming completion path for reliability fallback
+- 2026-03-05: ContextStore with token budget trimming
+- 2026-03-06: InlineTechnicalExplanationFormat rules for coding answers
+- 2026-03-12: Rate-limit min request interval to avoid burst spend
