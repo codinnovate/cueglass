@@ -17,3 +17,4 @@
 - 2026-03-05: ContextStore with token budget trimming
 - 2026-03-06: InlineTechnicalExplanationFormat rules for coding answers
 - 2026-03-12: Rate-limit min request interval to avoid burst spend
+- 2026-03-16: Better OpenAI error surfaces (invalid key, rate limit, timeout)
