@@ -19,3 +19,4 @@
 - 2026-03-12: Rate-limit min request interval to avoid burst spend
 - 2026-03-16: Better OpenAI error surfaces (invalid key, rate limit, timeout)
 - 2026-03-23: Apply sharingType.none for blind-to-share windows
+- 2026-03-26: Overlay opacity, font size, click-through, position lock
