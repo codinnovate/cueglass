@@ -21,3 +21,4 @@
 - 2026-03-23: Apply sharingType.none for blind-to-share windows
 - 2026-03-26: Overlay opacity, font size, click-through, position lock
 - 2026-03-27: Persist overlay frame across launches
+- 2026-03-30: Status blink while listening / thinking
