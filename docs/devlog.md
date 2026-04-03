@@ -18,3 +18,8 @@
 - 2026-03-06: InlineTechnicalExplanationFormat rules for coding answers
 - 2026-03-12: Rate-limit min request interval to avoid burst spend
 - 2026-03-16: Better OpenAI error surfaces (invalid key, rate limit, timeout)
+- 2026-03-23: Apply sharingType.none for blind-to-share windows
+- 2026-03-26: Overlay opacity, font size, click-through, position lock
+- 2026-03-27: Persist overlay frame across launches
+- 2026-03-30: Status blink while listening / thinking
+- 2026-04-01: Settings tabs: API, Capture, Overlay, Prompt, General
