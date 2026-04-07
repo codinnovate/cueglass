@@ -23,3 +23,4 @@
 - 2026-03-27: Persist overlay frame across launches
 - 2026-03-30: Status blink while listening / thinking
 - 2026-04-01: Settings tabs: API, Capture, Overlay, Prompt, General
+- 2026-04-07: Fix overlay focus steal when regenerating answers
