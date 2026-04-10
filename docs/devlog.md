@@ -25,3 +25,4 @@
 - 2026-04-01: Settings tabs: API, Capture, Overlay, Prompt, General
 - 2026-04-07: Fix overlay focus steal when regenerating answers
 - 2026-04-08: Manual smoke checklist added to README
+- 2026-04-10: Polish StatusBadge and session idle/listening/thinking states
