@@ -29,3 +29,4 @@
 - 2026-04-13: Settings UI: preferred language picker (Swift, Python, JS, etc.)
 - 2026-04-14: PromptBuilder injects preferred language into coding prompts
 - 2026-04-15: Unit tests for language-aware prompt assembly
+- 2026-04-20: Drop zone + file picker for PNG/JPEG interview problem images
