@@ -32,3 +32,4 @@
 - 2026-04-20: Drop zone + file picker for PNG/JPEG interview problem images
 - 2026-04-21: Send images to OpenAI as multimodal input with OCR fallback
 - 2026-04-22: Paste image from clipboard into AskQuestionField
+- 2026-04-23: Thumbnail strip and remove-attachment controls in overlay
