@@ -33,3 +33,6 @@
 - 2026-04-21: Send images to OpenAI as multimodal input with OCR fallback
 - 2026-04-22: Paste image from clipboard into AskQuestionField
 - 2026-04-23: Thumbnail strip and remove-attachment controls in overlay
+- 2026-04-28: Interview type presets: behavioral, coding, system design
+- 2026-04-29: Answer length presets: concise / standard / deep dive
+- 2026-04-30: Export session transcript as Markdown
