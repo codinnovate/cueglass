@@ -36,3 +36,4 @@
 - 2026-04-28: Interview type presets: behavioral, coding, system design
 - 2026-04-29: Answer length presets: concise / standard / deep dive
 - 2026-04-30: Export session transcript as Markdown
+- 2026-05-05: Custom hotkey remapping in Settings
