@@ -39,3 +39,4 @@
 - 2026-05-05: Custom hotkey remapping in Settings
 - 2026-05-06: Overlay always-on-top toggle and multi-display reposition
 - 2026-05-07: Reduce motion / accessibility font scaling for overlay
+- 2026-05-12: Offline-friendly error banners when network fails
