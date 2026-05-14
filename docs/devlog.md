@@ -41,3 +41,4 @@
 - 2026-05-07: Reduce motion / accessibility font scaling for overlay
 - 2026-05-12: Offline-friendly error banners when network fails
 - 2026-05-13: Model list refresh and safe fallback to gpt-4o-mini
+- 2026-05-14: Context summarization when token budget is exceeded
