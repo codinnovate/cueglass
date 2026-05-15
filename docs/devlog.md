@@ -42,3 +42,4 @@
 - 2026-05-12: Offline-friendly error banners when network fails
 - 2026-05-13: Model list refresh and safe fallback to gpt-4o-mini
 - 2026-05-14: Context summarization when token budget is exceeded
+- 2026-05-15: Unit tests for context summarization triggers
