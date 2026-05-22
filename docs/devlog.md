@@ -45,3 +45,4 @@
 - 2026-05-15: Unit tests for context summarization triggers
 - 2026-05-19: Screenshot button path: one-shot OCR to answer without Listen
 - 2026-05-20: Clear / regenerate / copy polish and empty states
+- 2026-05-22: Integration tests covering image + language preference paths
