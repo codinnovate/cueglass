@@ -49,3 +49,4 @@
 - 2026-05-26: Expand InterviewSessionManager integration coverage
 - 2026-05-27: Fake-based tests for permission denial paths
 - 2026-05-28: Fix session restart after Stop leaving mic hung
+- 2026-06-02: Performance: cancel in-flight streams on new question
