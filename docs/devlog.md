@@ -51,3 +51,4 @@
 - 2026-05-28: Fix session restart after Stop leaving mic hung
 - 2026-06-02: Performance: cancel in-flight streams on new question
 - 2026-06-03: Memory: release capture buffers aggressively on pause
+- 2026-06-05: Rename product strings from Smarty to Cueglass
