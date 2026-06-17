@@ -53,3 +53,4 @@
 - 2026-06-03: Memory: release capture buffers aggressively on pause
 - 2026-06-05: Rename product strings from Smarty to Cueglass
 - 2026-06-09: Rewrite README for Cueglass: features, privacy, build, smoke tests
+- 2026-06-17: UI polish pass on Settings and PermissionGuide
