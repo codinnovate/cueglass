@@ -56,3 +56,4 @@
 - 2026-06-17: UI polish pass on Settings and PermissionGuide
 - 2026-06-18: Overlay markdown theme tweak for dark menu bar apps
 - 2026-06-24: Bugfix: clipboard image paste on empty ask field
+- 2026-06-25: Bugfix: preferred language ignored for pure behavioral mode
