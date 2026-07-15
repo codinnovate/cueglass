@@ -58,3 +58,4 @@
 - 2026-06-24: Bugfix: clipboard image paste on empty ask field
 - 2026-06-25: Bugfix: preferred language ignored for pure behavioral mode
 - 2026-07-08: Final test suite green; document xcodebuild test recipe
+- 2026-07-15: README badges and screenshots placeholders
