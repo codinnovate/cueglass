@@ -14,23 +14,23 @@ enum OpenAIError: LocalizedError, Sendable, Equatable {
     var errorDescription: String? {
         switch self {
         case .missingAPIKey:
-            return "Add your OpenAI API key in Settings."
+            return "Add your API key in Settings."
         case .invalidAPIKey:
-            return "The OpenAI API key is invalid."
+            return "The API key is invalid."
         case .rateLimited:
-            return "OpenAI rate limit reached. Retrying shortly…"
+            return "Rate limit reached. Retrying shortly…"
         case .timeout:
-            return "The OpenAI request timed out."
+            return "The request timed out."
         case .network(let message):
             return "Network error: \(message)"
         case .server(let code, let message):
-            return "OpenAI error (\(code)): \(message)"
+            return "API error (\(code)): \(message)"
         case .emptyResponse:
-            return "OpenAI returned an empty response."
+            return "The AI provider returned an empty response."
         case .decoding(let message):
-            return "Failed to parse OpenAI response: \(message)"
+            return "Failed to parse the AI response: \(message)"
         case .encodingFailed:
-            return "Failed to encode the OpenAI request."
+            return "Failed to encode the AI request."
         }
     }
 }

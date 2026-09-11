@@ -55,7 +55,7 @@ final class InterviewSessionManager {
     private let screenCapture: any ScreenCapturing
     private let ocr: any OCRProcessing
     private let speech: any SpeechRecognizing
-    private let openAI: any OpenAIClienting
+    private let aiClient: any AIProviderClienting
     private let contextStore: ContextStore
     private let summarizer: ContextSummarizer
     private var streamTask: Task<Void, Never>?
@@ -86,7 +86,7 @@ final class InterviewSessionManager {
         screenCapture: any ScreenCapturing = ScreenCaptureService(),
         ocr: any OCRProcessing = OCRService(),
         speech: any SpeechRecognizing = SpeechRecognitionService(),
-        openAI: any OpenAIClienting = OpenAIClient(),
+        aiClient: any AIProviderClienting = AIClientRouter(openAI: OpenAIClient()),
         contextStore: ContextStore = ContextStore()
     ) {
         self.settingsStore = settingsStore
@@ -94,9 +94,9 @@ final class InterviewSessionManager {
         self.screenCapture = screenCapture
         self.ocr = ocr
         self.speech = speech
-        self.openAI = openAI
+        self.aiClient = aiClient
         self.contextStore = contextStore
-        self.summarizer = ContextSummarizer(openAI: openAI)
+        self.summarizer = ContextSummarizer(aiClient: aiClient)
         self.history = settingsStore.recentHistory
     }
 
@@ -129,13 +129,23 @@ final class InterviewSessionManager {
         return manager
     }
 
+    /// Voice input (Whisper/Stream) always transcribes through OpenAI, regardless of the
+    /// provider selected for answers.
+    private var missingVoiceKeyMessage: String {
+        "Add your OpenAI API key in Settings to use voice input."
+    }
+
+    private var missingProviderKeyMessage: String {
+        "Add your \(settingsStore.settings.provider.displayName) API key in Settings."
+    }
+
     func startSession() async {
         guard settingsStore.settings.assistantMode == .stream else {
             presentError("Start Session is for Stream mode. Use the mic + Send in Whisper.")
             return
         }
-        guard settingsStore.hasAPIKey else {
-            presentError("Add your OpenAI API key in Settings.")
+        guard settingsStore.hasAPIKey(for: .openAI) else {
+            presentError(missingVoiceKeyMessage)
             return
         }
 
@@ -394,7 +404,7 @@ final class InterviewSessionManager {
         let images = takePendingImages()
         guard !trimmed.isEmpty || !images.isEmpty else { return }
         guard settingsStore.hasAPIKey else {
-            presentError("Add your OpenAI API key in Settings.")
+            presentError(missingProviderKeyMessage)
             return
         }
         guard status != .paused else { return }
@@ -447,7 +457,7 @@ final class InterviewSessionManager {
     /// Force-answer from the current live transcript / pending question (manual pause).
     func confirmHeardAndAnswer() async {
         guard settingsStore.hasAPIKey else {
-            presentError("Add your OpenAI API key in Settings.")
+            presentError(missingProviderKeyMessage)
             return
         }
         guard status != .paused else { return }
@@ -507,8 +517,8 @@ final class InterviewSessionManager {
             presentError("Switch to Stream mode to use Listen.")
             return
         }
-        guard settingsStore.hasAPIKey else {
-            presentError("Add your OpenAI API key in Settings.")
+        guard settingsStore.hasAPIKey(for: .openAI) else {
+            presentError(missingVoiceKeyMessage)
             return
         }
         // Allow re-arming while an answer is generating — mic keeps capturing; pauses queue.
@@ -563,7 +573,7 @@ final class InterviewSessionManager {
             return nil
         }
         guard settingsStore.hasAPIKey else {
-            reportRegionCaptureIssue("Add your OpenAI API key in Settings → API, then press ⌃⌥S again.")
+            reportRegionCaptureIssue("\(missingProviderKeyMessage) → API, then press ⌃⌥S again.")
             return nil
         }
         guard permissions.screenCapturePreflight() else {
@@ -632,8 +642,8 @@ final class InterviewSessionManager {
     /// Whisper: tap mic to start / pause / resume recording (no pause VAD).
     func toggleWhisperRecording() async {
         guard settingsStore.settings.assistantMode == .whisper else { return }
-        guard settingsStore.hasAPIKey else {
-            presentError("Add your OpenAI API key in Settings.")
+        guard settingsStore.hasAPIKey(for: .openAI) else {
+            presentError(missingVoiceKeyMessage)
             return
         }
         guard !isWhisperTranscribing else { return }
@@ -665,7 +675,7 @@ final class InterviewSessionManager {
         do {
             try await speech.startManualCapture(
                 microphoneUID: settingsStore.settings.selectedMicrophoneUID,
-                apiKey: settingsStore.apiKey
+                apiKey: settingsStore.apiKey(for: .openAI)
             )
             startWhisperTimer()
             isWhisperRecording = true
@@ -698,8 +708,8 @@ final class InterviewSessionManager {
     /// Whisper: while recording, Send stops capture automatically → STT → answer.
     func sendWhisperRecording() async {
         guard settingsStore.settings.assistantMode == .whisper else { return }
-        guard settingsStore.hasAPIKey else {
-            presentError("Add your OpenAI API key in Settings.")
+        guard settingsStore.hasAPIKey(for: .openAI) else {
+            presentError(missingVoiceKeyMessage)
             return
         }
         guard !isWhisperTranscribing else { return }
@@ -775,7 +785,7 @@ final class InterviewSessionManager {
     private func performScreenshotSolve(accuracy: OCRAccuracy) async {
         guard regionCaptureID == nil else { return }
         guard settingsStore.hasAPIKey else {
-            presentError("Add your OpenAI API key in Settings.")
+            presentError(missingProviderKeyMessage)
             return
         }
         guard status != .thinking, status != .streaming else { return }
@@ -845,7 +855,7 @@ final class InterviewSessionManager {
         try await speech.start(
             microphoneUID: settings.selectedMicrophoneUID,
             pauseSeconds: settings.pauseDetectionSeconds,
-            apiKey: settingsStore.apiKey
+            apiKey: settingsStore.apiKey(for: .openAI)
         ) { [weak self] event in
             Task { @MainActor in
                 self?.handleSpeechEvent(event)
@@ -1038,7 +1048,7 @@ final class InterviewSessionManager {
         guard regionCaptureID == nil else { return }
         guard canRun, status != .paused else { return }
         guard settingsStore.hasAPIKey else {
-            presentError("Add your OpenAI API key in Settings.")
+            presentError(missingProviderKeyMessage)
             return
         }
 
@@ -1134,7 +1144,7 @@ final class InterviewSessionManager {
             do {
                 guard self.activeGenerationID == generationID else { return }
                 // 1) Technical spoken answer — show ASAP (no pause for friendly / key terms).
-                let technical = try await self.openAI.complete(
+                let technical = try await self.aiClient.complete(
                     apiKey: self.settingsStore.apiKey,
                     request: technicalRequest
                 )
@@ -1157,7 +1167,7 @@ final class InterviewSessionManager {
                     temperature: 0.45,
                     stream: false
                 )
-                let friendly = try await self.openAI.complete(
+                let friendly = try await self.aiClient.complete(
                     apiKey: self.settingsStore.apiKey,
                     request: friendlyRequest
                 )
@@ -1321,7 +1331,7 @@ final class InterviewSessionManager {
 
     private func extractKeyTerms(from answer: String) async throws -> [KeyTermCard] {
         let snippet = TokenEstimator.truncateToTokenBudget(answer, maxTokens: 1200)
-        let raw = try await openAI.complete(
+        let raw = try await aiClient.complete(
             apiKey: settingsStore.apiKey,
             request: OpenAIRequest(
                 provider: settingsStore.settings.provider,

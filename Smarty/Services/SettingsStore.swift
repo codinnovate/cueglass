@@ -21,7 +21,11 @@ final class SettingsStore {
     private(set) var apiKeys: [AIProvider: String] = [:]
 
     /// The key for the currently selected provider.
-    var apiKey: String { apiKeys[settings.provider] ?? "" }
+    var apiKey: String { apiKey(for: settings.provider) }
+
+    func apiKey(for provider: AIProvider) -> String {
+        apiKeys[provider] ?? ""
+    }
 
     var hasAPIKey: Bool { hasAPIKey(for: settings.provider) }
 

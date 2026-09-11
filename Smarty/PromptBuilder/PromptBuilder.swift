@@ -109,11 +109,11 @@ struct PromptBuilder: Sendable {
 }
 
 actor ContextSummarizer {
-    private let openAI: OpenAIClienting
+    private let aiClient: any AIProviderClienting
     private let builder = PromptBuilder()
 
-    init(openAI: OpenAIClienting) {
-        self.openAI = openAI
+    init(aiClient: any AIProviderClienting) {
+        self.aiClient = aiClient
     }
 
     func summarizeIfNeeded(
@@ -130,7 +130,7 @@ actor ContextSummarizer {
         let prompt = builder.summarizationPrompt(from: snapshot)
 
         do {
-            let summary = try await openAI.complete(
+            let summary = try await aiClient.complete(
                 apiKey: apiKey,
                 request: OpenAIRequest(
                     provider: provider,

@@ -14,7 +14,9 @@ final class AppEnvironment {
     let hotkeys: HotkeyService
     let launchAtLogin: LaunchAtLoginServing
     let screenCapture: ScreenCaptureService
+    /// STT (Whisper) always goes through OpenAI directly, regardless of the selected answer provider.
     let openAI: OpenAIClient
+    let aiClient: AIClientRouter
     @ObservationIgnored private let regionSelection = RegionSelectionController()
     @ObservationIgnored private var regionCaptureTask: Task<Void, Never>?
 
@@ -29,6 +31,7 @@ final class AppEnvironment {
         let permissions = PermissionService()
         let screenCapture = ScreenCaptureService()
         let openAI = OpenAIClient()
+        let aiClient = AIClientRouter(openAI: openAI)
         let speech = SpeechRecognitionService(transcriber: openAI)
         let ocr = OCRService()
         let contextStore = ContextStore()
@@ -39,7 +42,7 @@ final class AppEnvironment {
             screenCapture: screenCapture,
             ocr: ocr,
             speech: speech,
-            openAI: openAI,
+            aiClient: aiClient,
             contextStore: contextStore
         )
 
@@ -51,6 +54,7 @@ final class AppEnvironment {
         self.launchAtLogin = LaunchAtLoginService()
         self.screenCapture = screenCapture
         self.openAI = openAI
+        self.aiClient = aiClient
     }
 
     func bootstrap() {
