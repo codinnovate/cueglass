@@ -39,17 +39,39 @@ struct APISettingsSection: View {
     @State private var saveIsError = false
 
     private var store: SettingsStore { appEnvironment.settingsStore }
+    private var provider: AIProvider { store.settings.provider }
 
     var body: some View {
         Form {
-            Section("OpenAI") {
+            Section("Provider") {
+                Picker("Answer provider", selection: Binding(
+                    get: { store.settings.provider },
+                    set: { newProvider in
+                        store.update {
+                            $0.provider = newProvider
+                            $0.model = newProvider.defaultModels.first ?? $0.model
+                        }
+                    }
+                )) {
+                    ForEach(AIProvider.allCases) { provider in
+                        Text(provider.displayName).tag(provider)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text("Voice input (Whisper/Stream) always transcribes through OpenAI, regardless of the answer provider selected here.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("\(provider.displayName) API Key") {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         if revealKey {
-                            TextField("sk-...", text: $draftKey)
+                            TextField(provider.apiKeyPlaceholder, text: $draftKey)
                                 .textFieldStyle(.roundedBorder)
                         } else {
-                            SecureField("sk-...", text: $draftKey)
+                            SecureField(provider.apiKeyPlaceholder, text: $draftKey)
                                 .textFieldStyle(.roundedBorder)
                         }
                         Button(revealKey ? "Hide" : "Show") {
@@ -63,9 +85,9 @@ struct APISettingsSection: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(draftKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                  && !store.hasAPIKey)
+                                  && !store.hasAPIKey(for: provider))
 
-                        if store.hasAPIKey {
+                        if store.hasAPIKey(for: provider) {
                             Label("Key saved in Keychain", systemImage: "checkmark.seal.fill")
                                 .foregroundStyle(.green)
                                 .font(.callout)
@@ -82,7 +104,7 @@ struct APISettingsSection: View {
                             .foregroundStyle(saveIsError ? .red : .secondary)
                     }
 
-                    Text("Paste your key, then click Save. The Start button stays disabled until a key is saved.")
+                    Text("Paste your \(provider.displayName) key, then click Save. Each provider keeps its own key, so switching providers above doesn't lose the others.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -91,7 +113,7 @@ struct APISettingsSection: View {
                     get: { store.settings.model },
                     set: { value in store.update { $0.model = value } }
                 )) {
-                    ForEach(AppSettings.availableModels, id: \.self) { model in
+                    ForEach(provider.defaultModels, id: \.self) { model in
                         Text(model).tag(model)
                     }
                 }
@@ -133,17 +155,21 @@ struct APISettingsSection: View {
         }
         .formStyle(.grouped)
         .onAppear {
-            draftKey = store.apiKey
+            draftKey = store.apiKey(for: provider)
+            saveMessage = nil
+        }
+        .onChange(of: provider) { _, newProvider in
+            draftKey = store.apiKey(for: newProvider)
             saveMessage = nil
         }
     }
 
     private func saveKey() {
-        switch store.saveAPIKey(draftKey, for: store.settings.provider) {
+        switch store.saveAPIKey(draftKey, for: provider) {
         case .success:
-            draftKey = store.apiKey
+            draftKey = store.apiKey(for: provider)
             saveIsError = false
-            saveMessage = store.hasAPIKey ? "API key saved." : "API key cleared."
+            saveMessage = store.hasAPIKey(for: provider) ? "API key saved." : "API key cleared."
         case .failure(let error):
             saveIsError = true
             saveMessage = error.localizedDescription
