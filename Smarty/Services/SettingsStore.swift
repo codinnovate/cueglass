@@ -17,11 +17,16 @@ final class SettingsStore {
         didSet { persistHistory() }
     }
 
-    /// Persisted API key (Keychain). Edit via `saveAPIKey` / Settings Save button.
-    private(set) var apiKey: String = ""
+    /// Persisted API keys (Keychain), one per provider. Edit via `saveAPIKey(_:for:)` / Settings Save button.
+    private(set) var apiKeys: [AIProvider: String] = [:]
 
-    var hasAPIKey: Bool {
-        !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    /// The key for the currently selected provider.
+    var apiKey: String { apiKeys[settings.provider] ?? "" }
+
+    var hasAPIKey: Bool { hasAPIKey(for: settings.provider) }
+
+    func hasAPIKey(for provider: AIProvider) -> Bool {
+        !(apiKeys[provider] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     init(
@@ -45,27 +50,31 @@ final class SettingsStore {
             recentHistory = []
         }
 
-        apiKey = (try? keychain.loadAPIKey()) ?? ""
         migrateOverlayFontSizeIfNeeded()
+        reloadAPIKeysFromKeychain()
     }
 
-    func reloadAPIKeyFromKeychain() {
-        apiKey = (try? keychain.loadAPIKey()) ?? ""
+    func reloadAPIKeysFromKeychain() {
+        var loaded: [AIProvider: String] = [:]
+        for provider in AIProvider.allCases {
+            loaded[provider] = (try? keychain.loadAPIKey(for: provider)) ?? ""
+        }
+        apiKeys = loaded
     }
 
     @discardableResult
-    func saveAPIKey(_ key: String) -> Result<Void, Error> {
+    func saveAPIKey(_ key: String, for provider: AIProvider) -> Result<Void, Error> {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
             if trimmed.isEmpty {
-                try keychain.deleteAPIKey()
-                apiKey = ""
+                try keychain.deleteAPIKey(for: provider)
+                apiKeys[provider] = ""
             } else {
-                try keychain.saveAPIKey(trimmed)
-                apiKey = trimmed
+                try keychain.saveAPIKey(trimmed, for: provider)
+                apiKeys[provider] = trimmed
             }
             // Re-read to confirm persistence.
-            reloadAPIKeyFromKeychain()
+            reloadAPIKeysFromKeychain()
             return .success(())
         } catch {
             AppLog.general.error("Failed to persist API key: \(error.localizedDescription)")

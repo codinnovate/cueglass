@@ -14,7 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        environment.settingsStore.reloadAPIKeyFromKeychain()
+        environment.settingsStore.reloadAPIKeysFromKeychain()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

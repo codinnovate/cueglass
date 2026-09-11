@@ -35,7 +35,10 @@ enum OpenAIError: LocalizedError, Sendable, Equatable {
     }
 }
 
-struct OpenAIRequest: Sendable {
+/// A provider-agnostic answer-generation request; each `AIProviderClienting` implementation
+/// maps this onto its own vendor's wire format.
+struct AIRequest: Sendable {
+    let provider: AIProvider
     let model: String
     let instructions: String
     let input: String
@@ -44,6 +47,7 @@ struct OpenAIRequest: Sendable {
     let images: [ImageAttachment]
 
     init(
+        provider: AIProvider,
         model: String,
         instructions: String,
         input: String,
@@ -51,6 +55,7 @@ struct OpenAIRequest: Sendable {
         stream: Bool,
         images: [ImageAttachment] = []
     ) {
+        self.provider = provider
         self.model = model
         self.instructions = instructions
         self.input = input
@@ -60,9 +65,11 @@ struct OpenAIRequest: Sendable {
     }
 }
 
+typealias OpenAIRequest = AIRequest
+
 /// Builds Responses API JSON bodies (text-only or multimodal). Exposed for unit tests.
 enum OpenAIPayloadBuilder {
-    static func makeBody(_ request: OpenAIRequest) throws -> Data {
+    static func makeBody(_ request: AIRequest) throws -> Data {
         var payload: [String: Any] = [
             "model": request.model,
             "instructions": request.instructions,
@@ -90,7 +97,7 @@ enum OpenAIPayloadBuilder {
             ]
         }
 
-        if AppSettings.supportsTemperature(request.model) {
+        if request.provider.supportsTemperature(request.model) {
             payload["temperature"] = request.temperature
         }
         guard JSONSerialization.isValidJSONObject(payload),
@@ -102,9 +109,15 @@ enum OpenAIPayloadBuilder {
     }
 }
 
-protocol OpenAIClienting: Actor {
-    func streamResponse(apiKey: String, request: OpenAIRequest) -> AsyncThrowingStream<String, Error>
-    func complete(apiKey: String, request: OpenAIRequest) async throws -> String
+/// The provider-agnostic surface: any vendor that can turn (instructions, input) into text.
+protocol AIProviderClienting: Actor {
+    func streamResponse(apiKey: String, request: AIRequest) -> AsyncThrowingStream<String, Error>
+    func complete(apiKey: String, request: AIRequest) async throws -> String
+}
+
+/// OpenAI additionally does speech-to-text; STT always goes through this protocol regardless
+/// of which provider is selected for answers.
+protocol OpenAIClienting: AIProviderClienting {
     func transcribeAudio(apiKey: String, wavData: Data, prompt: String?) async throws -> String
 }
 
@@ -127,7 +140,7 @@ actor OpenAIClient: OpenAIClienting {
         self.session = session
     }
 
-    func streamResponse(apiKey: String, request: OpenAIRequest) -> AsyncThrowingStream<String, Error> {
+    func streamResponse(apiKey: String, request: AIRequest) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
@@ -141,8 +154,9 @@ actor OpenAIClient: OpenAIClienting {
         }
     }
 
-    func complete(apiKey: String, request: OpenAIRequest) async throws -> String {
-        let body = try OpenAIPayloadBuilder.makeBody(OpenAIRequest(
+    func complete(apiKey: String, request: AIRequest) async throws -> String {
+        let body = try OpenAIPayloadBuilder.makeBody(AIRequest(
+            provider: request.provider,
             model: request.model,
             instructions: request.instructions,
             input: request.input,
@@ -255,7 +269,7 @@ actor OpenAIClient: OpenAIClienting {
 
     private func performStream(
         apiKey: String,
-        request: OpenAIRequest,
+        request: AIRequest,
         continuation: AsyncThrowingStream<String, Error>.Continuation
     ) async throws {
         var attempt = 0

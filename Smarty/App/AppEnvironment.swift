@@ -55,13 +55,13 @@ final class AppEnvironment {
 
     func bootstrap() {
         guard !didBootstrap else {
-            settingsStore.reloadAPIKeyFromKeychain()
+            settingsStore.reloadAPIKeysFromKeychain()
             overlayManager.applyScreenShareExclusionToAllWindows()
             return
         }
         didBootstrap = true
 
-        settingsStore.reloadAPIKeyFromKeychain()
+        settingsStore.reloadAPIKeysFromKeychain()
         settingsStore.migratePromptTemplateIfNeeded()
         overlayManager.applyScreenShareExclusionToAllWindows()
         // The overlay is the only window presented at startup.

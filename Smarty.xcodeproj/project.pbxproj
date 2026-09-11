@@ -57,6 +57,7 @@
 		C0D285F5969E15DE4C01350E /* TestFakes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A865AEA4B3EEA53380AECDE6 /* TestFakes.swift */; };
 		C0F7A0DBCBDD5138BD10E8B6 /* OverlayLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C132AA05BC90D2F0896E3AB1 /* OverlayLifecycleTests.swift */; };
 		C13D4E9C4E97091E00A7AD0B /* PreferredProgrammingLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 428C53FF3BA79D0874F3B15B /* PreferredProgrammingLanguage.swift */; };
+		C675402077FB91D24F9E44A3 /* AIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12EB3BFF0BC49320BBFBBFD6 /* AIProvider.swift */; };
 		CBB79F37A8995F42B8930A24 /* KeyTermCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2941E26C166F4BDDCB0C34FF /* KeyTermCard.swift */; };
 		D0DD2E9FEDE2D816C007F438 /* CGImage+Hash.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2657DBDEE8782E415A60C16 /* CGImage+Hash.swift */; };
 		DD83EE1696DB93B97E9F2211 /* RegionSelectionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D459C9AE15836C65BFB0D100 /* RegionSelectionController.swift */; };
@@ -86,6 +87,7 @@
 		03FE4A7E410F558E08C41396 /* InterviewRole.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InterviewRole.swift; sourceTree = "<group>"; };
 		0AFFD43621375EED587AB500 /* OCRService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRService.swift; sourceTree = "<group>"; };
 		0C970E890B913524D2D57730 /* OpenAIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIClientTests.swift; sourceTree = "<group>"; };
+		12EB3BFF0BC49320BBFBBFD6 /* AIProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProvider.swift; sourceTree = "<group>"; };
 		132BB4BFFB433A761ED43223 /* SettingsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStoreTests.swift; sourceTree = "<group>"; };
 		181EF2AC87165F800E574A3A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1983E75D2EF2E9B5026C591E /* OverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayView.swift; sourceTree = "<group>"; };
@@ -319,6 +321,7 @@
 		A834826ABCC5181E8C4E4537 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				12EB3BFF0BC49320BBFBBFD6 /* AIProvider.swift */,
 				244AD69EC344A77FC5E727DC /* AppSettings.swift */,
 				4D1B8A2685F9061F8E2B0ACF /* AppStatus.swift */,
 				03D38B3529E146E74291EB40 /* AssistantMode.swift */,
@@ -502,6 +505,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C675402077FB91D24F9E44A3 /* AIProvider.swift in Sources */,
 				39ADE818E9F988011BE874C9 /* AppDelegate.swift in Sources */,
 				FA4149FD108A00C77DE48AC2 /* AppEnvironment.swift in Sources */,
 				A614BC6ABDD69CA2D6847F36 /* AppLog.swift in Sources */,

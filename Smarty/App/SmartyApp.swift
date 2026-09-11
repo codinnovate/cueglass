@@ -14,7 +14,7 @@ struct SmartyApp: App {
                 .preferredColorScheme(.dark)
                 .frame(minWidth: 560, minHeight: 520)
                 .onAppear {
-                    appEnvironment.settingsStore.reloadAPIKeyFromKeychain()
+                    appEnvironment.settingsStore.reloadAPIKeysFromKeychain()
                 }
         }
         .commands {

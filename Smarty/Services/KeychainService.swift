@@ -2,9 +2,9 @@ import Foundation
 import Security
 
 protocol KeychainServing: Sendable {
-    func saveAPIKey(_ key: String) throws
-    func loadAPIKey() throws -> String?
-    func deleteAPIKey() throws
+    func saveAPIKey(_ key: String, for provider: AIProvider) throws
+    func loadAPIKey(for provider: AIProvider) throws -> String?
+    func deleteAPIKey(for provider: AIProvider) throws
 }
 
 enum KeychainError: LocalizedError {
@@ -23,9 +23,8 @@ enum KeychainError: LocalizedError {
 
 struct KeychainService: KeychainServing {
     private let service = "com.smarty.app"
-    private let account = "openai_api_key"
 
-    func saveAPIKey(_ key: String) throws {
+    func saveAPIKey(_ key: String, for provider: AIProvider) throws {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let data = trimmed.data(using: .utf8) else {
             throw KeychainError.encodingFailed
@@ -34,7 +33,7 @@ struct KeychainService: KeychainServing {
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account
+            kSecAttrAccount as String: provider.keychainAccount
         ]
 
         let update: [String: Any] = [
@@ -61,11 +60,11 @@ struct KeychainService: KeychainServing {
         }
     }
 
-    func loadAPIKey() throws -> String? {
+    func loadAPIKey(for provider: AIProvider) throws -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrAccount as String: provider.keychainAccount,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
@@ -85,11 +84,11 @@ struct KeychainService: KeychainServing {
         return String(data: data, encoding: .utf8)
     }
 
-    func deleteAPIKey() throws {
+    func deleteAPIKey(for provider: AIProvider) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account
+            kSecAttrAccount as String: provider.keychainAccount
         ]
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {

@@ -118,6 +118,7 @@ actor ContextSummarizer {
 
     func summarizeIfNeeded(
         apiKey: String,
+        provider: AIProvider,
         model: String,
         store: ContextStore,
         maxTokens: Int
@@ -132,6 +133,7 @@ actor ContextSummarizer {
             let summary = try await openAI.complete(
                 apiKey: apiKey,
                 request: OpenAIRequest(
+                    provider: provider,
                     model: model,
                     instructions: prompt.instructions,
                     input: prompt.input,

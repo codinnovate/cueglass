@@ -2,6 +2,7 @@ import Foundation
 import CoreGraphics
 
 struct AppSettings: Codable, Equatable, Sendable {
+    var provider: AIProvider
     var model: String
     var temperature: Double
     var captureInterval: TimeInterval
@@ -70,6 +71,7 @@ struct AppSettings: Codable, Equatable, Sendable {
     """ + InlineTechnicalExplanationFormat.rules
 
     static let `default` = AppSettings(
+        provider: .openAI,
         model: "gpt-4o-mini",
         temperature: 0.7,
         captureInterval: 1.0,
@@ -96,18 +98,15 @@ struct AppSettings: Codable, Equatable, Sendable {
         roleProfile: .default
     )
 
-    static let availableModels = [
-        "gpt-4o-mini",
-        "gpt-4o",
-        "gpt-4.1-mini",
-        "gpt-4.1"
-    ]
+    /// Kept for source compatibility; prefer `AIProvider.defaultModels`.
+    static let availableModels = AIProvider.openAI.defaultModels
 
     static func supportsTemperature(_ model: String) -> Bool {
-        !model.hasPrefix("o1") && !model.hasPrefix("o3") && !model.hasPrefix("o4")
+        AIProvider.openAI.supportsTemperature(model)
     }
 
     init(
+        provider: AIProvider,
         model: String,
         temperature: Double,
         captureInterval: TimeInterval,
@@ -133,6 +132,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         answerLength: AnswerLength,
         roleProfile: RoleProfile = .default
     ) {
+        self.provider = provider
         self.model = model
         self.temperature = temperature
         self.captureInterval = captureInterval
@@ -162,6 +162,7 @@ struct AppSettings: Codable, Equatable, Sendable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = Self.default
+        provider = try c.decodeIfPresent(AIProvider.self, forKey: .provider) ?? d.provider
         model = try c.decodeIfPresent(String.self, forKey: .model) ?? d.model
         temperature = try c.decodeIfPresent(Double.self, forKey: .temperature) ?? d.temperature
         captureInterval = try c.decodeIfPresent(TimeInterval.self, forKey: .captureInterval) ?? d.captureInterval

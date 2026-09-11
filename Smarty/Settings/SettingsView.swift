@@ -139,7 +139,7 @@ struct APISettingsSection: View {
     }
 
     private func saveKey() {
-        switch store.saveAPIKey(draftKey) {
+        switch store.saveAPIKey(draftKey, for: store.settings.provider) {
         case .success:
             draftKey = store.apiKey
             saveIsError = false

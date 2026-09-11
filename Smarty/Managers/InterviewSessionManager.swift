@@ -1090,6 +1090,7 @@ final class InterviewSessionManager {
                 guard let self else { return }
                 await self.summarizer.summarizeIfNeeded(
                     apiKey: self.settingsStore.apiKey,
+                    provider: settings.provider,
                     model: settings.model,
                     store: self.contextStore,
                     maxTokens: settings.maxContextTokens
@@ -1115,8 +1116,11 @@ final class InterviewSessionManager {
         )
         let technicalInstructions = Self.technicalSpokenInstructions(for: role) + "\n\n" + sessionGuidance
 
-        let fastModel = settings.model.hasPrefix("gpt-4o") ? settings.model : "gpt-4o-mini"
+        let fastModel = settings.provider == .openAI
+            ? (settings.model.hasPrefix("gpt-4o") ? settings.model : "gpt-4o-mini")
+            : settings.model
         let technicalRequest = OpenAIRequest(
+            provider: settings.provider,
             model: fastModel,
             instructions: technicalInstructions,
             input: leanInput,
@@ -1140,6 +1144,7 @@ final class InterviewSessionManager {
 
                 // 2) Friendly answer in a second call (does not delay the first paint).
                 let friendlyRequest = OpenAIRequest(
+                    provider: settings.provider,
                     model: fastModel,
                     instructions: Self.friendlyExplainInstructions,
                     input: """
@@ -1319,6 +1324,7 @@ final class InterviewSessionManager {
         let raw = try await openAI.complete(
             apiKey: settingsStore.apiKey,
             request: OpenAIRequest(
+                provider: settingsStore.settings.provider,
                 model: settingsStore.settings.model,
                 instructions: """
                 Extract 3–6 important terms from the interview answer that matter for a \(settingsStore.settings.roleProfile.field.displayName) role.
