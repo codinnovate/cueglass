@@ -1,9 +1,12 @@
 import Foundation
 
 /// Google's Gemini API (https://ai.google.dev), `generateContent` / `streamGenerateContent`.
-actor GeminiClient: AIProviderClienting {
+actor GeminiClient: AIProviderClienting, SpeechTranscribing {
     private let session: URLSession
     private let baseURL = "https://generativelanguage.googleapis.com/v1beta/models"
+    /// Gemini has no dedicated transcription endpoint; native audio input on a fast
+    /// multimodal model stands in for Whisper.
+    private let speechToTextModel = "gemini-2.5-flash"
 
     init(session: URLSession = {
         let config = URLSessionConfiguration.default
@@ -50,6 +53,83 @@ actor GeminiClient: AIProviderClienting {
             }
         }
         throw lastError ?? OpenAIError.network("Unknown failure")
+    }
+
+    /// Transcribes recorded speech by sending it as inline audio content with an instruction
+    /// to transcribe verbatim — Gemini has no separate STT endpoint like Whisper.
+    func transcribeAudio(apiKey: String, wavData: Data, prompt: String?) async throws -> String {
+        guard let url = URL(string: "\(baseURL)/\(speechToTextModel):generateContent?key=\(apiKey)") else {
+            throw OpenAIError.network("Invalid Gemini endpoint")
+        }
+        let body = try makeTranscriptionBody(wavData: wavData, prompt: prompt)
+
+        var attempt = 0
+        var lastError: Error?
+        while attempt < 3 {
+            attempt += 1
+            do {
+                var urlRequest = URLRequest(url: url)
+                urlRequest.httpMethod = "POST"
+                urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                urlRequest.httpBody = body
+                urlRequest.timeoutInterval = 60
+
+                let (data, response) = try await session.data(for: urlRequest)
+                try validate(response: response, data: data)
+                let text = textFromCandidates(
+                    (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+                ).trimmed
+                guard !text.isEmpty else { throw OpenAIError.emptyResponse }
+                return text
+            } catch let error as OpenAIError {
+                lastError = error
+                if shouldRetry(error), attempt < 3 {
+                    try await Task.sleep(seconds: Double(attempt) * 1.5)
+                    continue
+                }
+                throw error
+            } catch {
+                lastError = error
+                if attempt < 3 {
+                    try await Task.sleep(seconds: Double(attempt) * 1.5)
+                    continue
+                }
+            }
+        }
+        throw lastError ?? OpenAIError.network("Unknown failure")
+    }
+
+    private func makeTranscriptionBody(wavData: Data, prompt: String?) throws -> Data {
+        var instruction = "Transcribe the spoken audio verbatim as plain text. " +
+            "Output only the transcription with no commentary, labels, or quotation marks."
+        if let prompt, !prompt.isEmpty {
+            instruction += " These technical terms may appear and should be spelled correctly if heard: \(prompt)"
+        }
+
+        let payload: [String: Any] = [
+            "contents": [
+                [
+                    "role": "user",
+                    "parts": [
+                        ["text": instruction],
+                        [
+                            "inline_data": [
+                                "mime_type": "audio/wav",
+                                "data": wavData.base64EncodedString()
+                            ]
+                        ]
+                    ]
+                ]
+            ],
+            "generationConfig": ["temperature": 0]
+        ]
+
+        guard JSONSerialization.isValidJSONObject(payload),
+              let data = try? JSONSerialization.data(withJSONObject: payload),
+              !data.isEmpty else {
+            throw OpenAIError.encodingFailed
+        }
+        return data
     }
 
     func streamResponse(apiKey: String, request: AIRequest) -> AsyncThrowingStream<String, Error> {

@@ -22,7 +22,7 @@ No accounts, no backend, no analytics. Pick an AI provider in Settings, paste it
 - macOS 14.0+
 - Xcode 16+
 - An API key for at least one provider: [OpenAI](https://platform.openai.com/api-keys), [Anthropic](https://console.anthropic.com/settings/keys), [Google AI Studio (Gemini)](https://aistudio.google.com/apikey), or [DeepSeek](https://platform.deepseek.com/api_keys)
-- An OpenAI API key specifically if you want voice input (Whisper/Stream modes) — speech-to-text always uses OpenAI regardless of which provider you pick for answers
+- For voice input (Whisper/Stream modes): an OpenAI key, or a Gemini key with Gemini selected as the answer provider — Claude and DeepSeek have no speech-to-text
 
 ## Setup
 
@@ -41,7 +41,7 @@ No accounts, no backend, no analytics. Pick an AI provider in Settings, paste it
 
 4. Run (⌘R).
 
-5. **Settings → API** → pick a provider (OpenAI, Claude, Gemini, or DeepSeek), paste its API key → **Save**. Each provider's key is stored in **Keychain only**, under its own entry — never commit `.env` or key files (see `.gitignore`). Voice input (Whisper/Stream) needs an OpenAI key specifically, even if you answer with a different provider.
+5. **Settings → API** → pick a provider (OpenAI, Claude, Gemini, or DeepSeek), paste its API key → **Save**. Each provider's key is stored in **Keychain only**, under its own entry — never commit `.env` or key files (see `.gitignore`). Voice input (Whisper/Stream) uses Gemini when it's selected and has a saved key, otherwise it falls back to OpenAI.
 
 6. Grant Microphone / Speech / Screen Recording when prompted.
 
@@ -50,7 +50,7 @@ No accounts, no backend, no analytics. Pick an AI provider in Settings, paste it
 - Screenshots and attachment frames are processed in memory (not written as a capture archive)
 - Each provider's API key lives in its own Keychain entry
 - Settings, history, and window frame use UserDefaults
-- Only traffic to your selected AI provider (and OpenAI, for voice input) leaves the machine
+- Only traffic to your selected AI provider (and OpenAI, unless Gemini is handling voice input) leaves the machine
 - Region screenshots are sent to your selected provider for visual answering (OpenAI, Claude, and Gemini support this; DeepSeek is text-only), with optional OCR; typed drafts and pending attachments remain separate
 - No authentication / cloud account for Cueglass itself
 
@@ -98,9 +98,9 @@ Settings/       Provider/API, capture, overlay, prompt presets, general
 Managers/       InterviewSessionManager, OverlayManager
 ScreenCapture/  ScreenCaptureKit frames (in-memory)
 OCR/            Vision text extraction
-Speech/         Mic capture + OpenAI STT / pause detection
-OpenAI/         AIProviderClienting protocol + OpenAI Responses API client (text + multimodal + STT)
-AIProviders/    AIClientRouter, plus Claude / Gemini / DeepSeek clients
+Speech/         Mic capture + OpenAI/Gemini STT / pause detection
+OpenAI/         AIProviderClienting + SpeechTranscribing protocols; OpenAI Responses API client (text + multimodal + STT)
+AIProviders/    AIClientRouter, plus Claude / Gemini (also does STT) / DeepSeek clients
 PromptBuilder/  Context store, summarization, prompt assembly
 Services/       Keychain (per-provider keys), settings, permissions, hotkeys, login item
 Models/         Shared types (settings, AIProvider, attachments, messages)
@@ -108,8 +108,9 @@ Models/         Shared types (settings, AIProvider, attachments, messages)
 
 Answer generation is provider-agnostic: `InterviewSessionManager` and `ContextSummarizer` depend on
 `AIProviderClienting`, and `AIClientRouter` dispatches each request to the client for the currently
-selected `AIProvider`. Speech-to-text is the one exception — it always goes through `OpenAIClient`
-directly, since none of the other three vendors offer an equivalent transcription API today.
+selected `AIProvider`. Speech-to-text goes through `OpenAIClient` or `GeminiClient` directly
+(both implement `SpeechTranscribing`), selected per-session based on the answer provider;
+Claude and DeepSeek offer no transcription API today.
 
 MVVM: views bind to `@Observable` managers; capture / OCR / OpenAI run in actors.
 
