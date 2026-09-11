@@ -46,11 +46,13 @@ final class FakeSpeechService: SpeechRecognizing, @unchecked Sendable {
         microphoneUID: String?,
         pauseSeconds: TimeInterval,
         apiKey: String,
+        provider: AIProvider,
         handler: @escaping @Sendable (SpeechEvent) -> Void
     ) async throws {
         _ = microphoneUID
         _ = pauseSeconds
         _ = apiKey
+        _ = provider
         if shouldFailStart { throw SpeechError.unavailable }
         startCount += 1
         self.handler = handler
@@ -72,9 +74,10 @@ final class FakeSpeechService: SpeechRecognizing, @unchecked Sendable {
         _isMuted = muted
     }
 
-    func startManualCapture(microphoneUID: String?, apiKey: String) async throws {
+    func startManualCapture(microphoneUID: String?, apiKey: String, provider: AIProvider) async throws {
         _ = microphoneUID
         _ = apiKey
+        _ = provider
         if shouldFailStart { throw SpeechError.unavailable }
         manualStartCount += 1
         handler = nil

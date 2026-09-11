@@ -54,6 +54,12 @@ enum AIProvider: String, Codable, CaseIterable, Sendable, Identifiable {
         self != .deepSeek
     }
 
+    /// OpenAI (Whisper) and Gemini (native audio input) can transcribe speech; Claude and
+    /// DeepSeek have no audio input today.
+    var supportsSpeechToText: Bool {
+        self == .openAI || self == .gemini
+    }
+
     var apiKeyPlaceholder: String {
         switch self {
         case .openAI: return "sk-..."

@@ -31,8 +31,9 @@ final class AppEnvironment {
         let permissions = PermissionService()
         let screenCapture = ScreenCaptureService()
         let openAI = OpenAIClient()
-        let aiClient = AIClientRouter(openAI: openAI)
-        let speech = SpeechRecognitionService(transcriber: openAI)
+        let gemini = GeminiClient()
+        let aiClient = AIClientRouter(openAI: openAI, gemini: gemini)
+        let speech = SpeechRecognitionService(openAI: openAI, gemini: gemini)
         let ocr = OCRService()
         let contextStore = ContextStore()
 
