@@ -6,15 +6,18 @@ actor AIClientRouter: AIProviderClienting {
     private let openAI: any AIProviderClienting
     private let anthropic: any AIProviderClienting
     private let gemini: any AIProviderClienting
+    private let deepSeek: any AIProviderClienting
 
     init(
         openAI: any AIProviderClienting,
         anthropic: any AIProviderClienting = AnthropicClient(),
-        gemini: any AIProviderClienting = GeminiClient()
+        gemini: any AIProviderClienting = GeminiClient(),
+        deepSeek: any AIProviderClienting = DeepSeekClient()
     ) {
         self.openAI = openAI
         self.anthropic = anthropic
         self.gemini = gemini
+        self.deepSeek = deepSeek
     }
 
     private func client(for provider: AIProvider) -> any AIProviderClienting {
@@ -22,10 +25,7 @@ actor AIClientRouter: AIProviderClienting {
         case .openAI: return openAI
         case .anthropic: return anthropic
         case .gemini: return gemini
-        case .deepSeek:
-            // Wired up in a later step; route to OpenAI's client meanwhile is wrong,
-            // so fail loudly instead of silently answering with the wrong vendor.
-            return UnsupportedProviderClient(provider: provider)
+        case .deepSeek: return deepSeek
         }
     }
 
@@ -48,25 +48,6 @@ actor AIClientRouter: AIProviderClienting {
                 }
             }
             continuation.onTermination = { _ in task.cancel() }
-        }
-    }
-}
-
-/// Placeholder for providers not yet wired into the router.
-private actor UnsupportedProviderClient: AIProviderClienting {
-    let provider: AIProvider
-
-    init(provider: AIProvider) {
-        self.provider = provider
-    }
-
-    func complete(apiKey: String, request: AIRequest) async throws -> String {
-        throw OpenAIError.network("\(provider.displayName) is not supported yet.")
-    }
-
-    func streamResponse(apiKey: String, request: AIRequest) -> AsyncThrowingStream<String, Error> {
-        AsyncThrowingStream { continuation in
-            continuation.finish(throwing: OpenAIError.network("\(provider.displayName) is not supported yet."))
         }
     }
 }

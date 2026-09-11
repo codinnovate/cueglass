@@ -16,6 +16,7 @@
 		172A3B260DF68AC67CA05C7B /* PromptBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0E4CEC0BF2228AF243DC0B3 /* PromptBuilder.swift */; };
 		1A4895EEF09FD3DDFEF91BC1 /* KeyTermsPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE0688AB067555E84B2187CF /* KeyTermsPanel.swift */; };
 		1C7E5EB2D4568F4DED350A96 /* ConversationMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54F5DFD278BB5C43CADEC564 /* ConversationMessage.swift */; };
+		22A62E64AE108D6EC78891A8 /* DeepSeekClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FA14A4A10DBFA7523E9D33C /* DeepSeekClient.swift */; };
 		23542AF533FFA20875D1C1E8 /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9E226FA45F0E76E3717F91B /* StatusBadge.swift */; };
 		286292F2794016DCD02C2D3B /* MarkdownAnswerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 736F1542BCB33D1A53F708C7 /* MarkdownAnswerView.swift */; };
 		30CC21568EBA6E46D0326615 /* SmartyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E832586E1D10EF226843CAED /* SmartyApp.swift */; };
@@ -119,6 +120,7 @@
 		736F1542BCB33D1A53F708C7 /* MarkdownAnswerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownAnswerView.swift; sourceTree = "<group>"; };
 		76C09398261639C4AAC77624 /* SpeechRecognitionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognitionService.swift; sourceTree = "<group>"; };
 		822389D5C36A94EBC4696BB2 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		8FA14A4A10DBFA7523E9D33C /* DeepSeekClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepSeekClient.swift; sourceTree = "<group>"; };
 		9A945DDB5ACA370BBB0F5B15 /* StatusItemController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusItemController.swift; sourceTree = "<group>"; };
 		9FAAEBC49BB27515DB01C67B /* SilenceDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SilenceDetectorTests.swift; sourceTree = "<group>"; };
 		A3512BD598731517389530FE /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
@@ -200,6 +202,7 @@
 			children = (
 				420442B244003874D700C1AC /* AIClientRouter.swift */,
 				24A84B703A6E0A4327CE4BBE /* AnthropicClient.swift */,
+				8FA14A4A10DBFA7523E9D33C /* DeepSeekClient.swift */,
 				C0E176BD78CEE650713B333A /* GeminiClient.swift */,
 			);
 			path = AIProviders;
@@ -537,6 +540,7 @@
 				54081A3C408BA8E50163704E /* ContextStore.swift in Sources */,
 				1C7E5EB2D4568F4DED350A96 /* ConversationMessage.swift in Sources */,
 				10BBC672D7E1FF9A32AD1BFA /* Debouncer.swift in Sources */,
+				22A62E64AE108D6EC78891A8 /* DeepSeekClient.swift in Sources */,
 				021AB7C7A510D396A2244BE2 /* GeminiClient.swift in Sources */,
 				9ABA6E38A1D5E994B15AC53B /* HistoryView.swift in Sources */,
 				7A9DC620BA1574F46B365018 /* HotkeyService.swift in Sources */,
