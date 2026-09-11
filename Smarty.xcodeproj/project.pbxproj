@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		021AB7C7A510D396A2244BE2 /* GeminiClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E176BD78CEE650713B333A /* GeminiClient.swift */; };
 		02A281FE4FC3B5213774AAB1 /* AssistantMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03D38B3529E146E74291EB40 /* AssistantMode.swift */; };
 		03754987A0D36718AD5B0BDF /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 244AD69EC344A77FC5E727DC /* AppSettings.swift */; };
 		04F2466245E3C82F01C842C9 /* Task+Sleep.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6FF3637009F69C744EBFE02 /* Task+Sleep.swift */; };
@@ -129,6 +130,7 @@
 		B82A47C718C397756F9789C8 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		B9E226FA45F0E76E3717F91B /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
 		BBB8FCBC3A1A53A891B85C00 /* InterviewSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InterviewSessionManager.swift; sourceTree = "<group>"; };
+		C0E176BD78CEE650713B333A /* GeminiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiClient.swift; sourceTree = "<group>"; };
 		C132AA05BC90D2F0896E3AB1 /* OverlayLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayLifecycleTests.swift; sourceTree = "<group>"; };
 		CBDB63FEBC482AA6A91B3CC7 /* TokenEstimatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenEstimatorTests.swift; sourceTree = "<group>"; };
 		CE0688AB067555E84B2187CF /* KeyTermsPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTermsPanel.swift; sourceTree = "<group>"; };
@@ -198,6 +200,7 @@
 			children = (
 				420442B244003874D700C1AC /* AIClientRouter.swift */,
 				24A84B703A6E0A4327CE4BBE /* AnthropicClient.swift */,
+				C0E176BD78CEE650713B333A /* GeminiClient.swift */,
 			);
 			path = AIProviders;
 			sourceTree = "<group>";
@@ -534,6 +537,7 @@
 				54081A3C408BA8E50163704E /* ContextStore.swift in Sources */,
 				1C7E5EB2D4568F4DED350A96 /* ConversationMessage.swift in Sources */,
 				10BBC672D7E1FF9A32AD1BFA /* Debouncer.swift in Sources */,
+				021AB7C7A510D396A2244BE2 /* GeminiClient.swift in Sources */,
 				9ABA6E38A1D5E994B15AC53B /* HistoryView.swift in Sources */,
 				7A9DC620BA1574F46B365018 /* HotkeyService.swift in Sources */,
 				6ADA5AF135107ECFB84BEB24 /* ImageAttachment.swift in Sources */,

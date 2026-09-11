@@ -5,20 +5,24 @@ import Foundation
 actor AIClientRouter: AIProviderClienting {
     private let openAI: any AIProviderClienting
     private let anthropic: any AIProviderClienting
+    private let gemini: any AIProviderClienting
 
     init(
         openAI: any AIProviderClienting,
-        anthropic: any AIProviderClienting = AnthropicClient()
+        anthropic: any AIProviderClienting = AnthropicClient(),
+        gemini: any AIProviderClienting = GeminiClient()
     ) {
         self.openAI = openAI
         self.anthropic = anthropic
+        self.gemini = gemini
     }
 
     private func client(for provider: AIProvider) -> any AIProviderClienting {
         switch provider {
         case .openAI: return openAI
         case .anthropic: return anthropic
-        case .gemini, .deepSeek:
+        case .gemini: return gemini
+        case .deepSeek:
             // Wired up in a later step; route to OpenAI's client meanwhile is wrong,
             // so fail loudly instead of silently answering with the wrong vendor.
             return UnsupportedProviderClient(provider: provider)
