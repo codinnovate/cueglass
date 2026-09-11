@@ -129,10 +129,15 @@ final class InterviewSessionManager {
         return manager
     }
 
-    /// Voice input (Whisper/Stream) always transcribes through OpenAI, regardless of the
-    /// provider selected for answers.
+    /// Voice input (Whisper/Stream) transcribes through Gemini when that's the selected answer
+    /// provider and a Gemini key is saved; otherwise it falls back to OpenAI Whisper.
+    private var voiceProvider: AIProvider {
+        let provider = settingsStore.settings.provider
+        return (provider == .gemini && settingsStore.hasAPIKey(for: .gemini)) ? .gemini : .openAI
+    }
+
     private var missingVoiceKeyMessage: String {
-        "Add your OpenAI API key in Settings to use voice input."
+        "Add your \(voiceProvider.displayName) API key in Settings to use voice input."
     }
 
     private var missingProviderKeyMessage: String {
@@ -144,7 +149,7 @@ final class InterviewSessionManager {
             presentError("Start Session is for Stream mode. Use the mic + Send in Whisper.")
             return
         }
-        guard settingsStore.hasAPIKey(for: .openAI) else {
+        guard settingsStore.hasAPIKey(for: voiceProvider) else {
             presentError(missingVoiceKeyMessage)
             return
         }
@@ -517,7 +522,7 @@ final class InterviewSessionManager {
             presentError("Switch to Stream mode to use Listen.")
             return
         }
-        guard settingsStore.hasAPIKey(for: .openAI) else {
+        guard settingsStore.hasAPIKey(for: voiceProvider) else {
             presentError(missingVoiceKeyMessage)
             return
         }
@@ -642,7 +647,7 @@ final class InterviewSessionManager {
     /// Whisper: tap mic to start / pause / resume recording (no pause VAD).
     func toggleWhisperRecording() async {
         guard settingsStore.settings.assistantMode == .whisper else { return }
-        guard settingsStore.hasAPIKey(for: .openAI) else {
+        guard settingsStore.hasAPIKey(for: voiceProvider) else {
             presentError(missingVoiceKeyMessage)
             return
         }
@@ -675,7 +680,8 @@ final class InterviewSessionManager {
         do {
             try await speech.startManualCapture(
                 microphoneUID: settingsStore.settings.selectedMicrophoneUID,
-                apiKey: settingsStore.apiKey(for: .openAI)
+                apiKey: settingsStore.apiKey(for: voiceProvider),
+                provider: voiceProvider
             )
             startWhisperTimer()
             isWhisperRecording = true
@@ -708,7 +714,7 @@ final class InterviewSessionManager {
     /// Whisper: while recording, Send stops capture automatically → STT → answer.
     func sendWhisperRecording() async {
         guard settingsStore.settings.assistantMode == .whisper else { return }
-        guard settingsStore.hasAPIKey(for: .openAI) else {
+        guard settingsStore.hasAPIKey(for: voiceProvider) else {
             presentError(missingVoiceKeyMessage)
             return
         }
@@ -855,7 +861,8 @@ final class InterviewSessionManager {
         try await speech.start(
             microphoneUID: settings.selectedMicrophoneUID,
             pauseSeconds: settings.pauseDetectionSeconds,
-            apiKey: settingsStore.apiKey(for: .openAI)
+            apiKey: settingsStore.apiKey(for: voiceProvider),
+            provider: voiceProvider
         ) { [weak self] event in
             Task { @MainActor in
                 self?.handleSpeechEvent(event)

@@ -115,11 +115,13 @@ protocol AIProviderClienting: Actor {
     func complete(apiKey: String, request: AIRequest) async throws -> String
 }
 
-/// OpenAI additionally does speech-to-text; STT always goes through this protocol regardless
-/// of which provider is selected for answers.
-protocol OpenAIClienting: AIProviderClienting {
+/// A vendor that can transcribe recorded audio to text. OpenAI (Whisper) and Gemini
+/// (native audio input) both implement this; Claude and DeepSeek do not.
+protocol SpeechTranscribing: Actor {
     func transcribeAudio(apiKey: String, wavData: Data, prompt: String?) async throws -> String
 }
+
+protocol OpenAIClienting: AIProviderClienting, SpeechTranscribing {}
 
 actor OpenAIClient: OpenAIClienting {
     private let session: URLSession
