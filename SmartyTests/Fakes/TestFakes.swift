@@ -242,9 +242,9 @@ actor FakeOpenAI: OpenAIClienting {
 }
 
 final class FakeKeychain: KeychainServing, @unchecked Sendable {
-    private var value: String?
+    private var values: [AIProvider: String] = [:]
 
-    func saveAPIKey(_ key: String) throws { value = key }
-    func loadAPIKey() throws -> String? { value }
-    func deleteAPIKey() throws { value = nil }
+    func saveAPIKey(_ key: String, for provider: AIProvider) throws { values[provider] = key }
+    func loadAPIKey(for provider: AIProvider) throws -> String? { values[provider] }
+    func deleteAPIKey(for provider: AIProvider) throws { values[provider] = nil }
 }

@@ -98,13 +98,6 @@ struct AppSettings: Codable, Equatable, Sendable {
         roleProfile: .default
     )
 
-    /// Kept for source compatibility; prefer `AIProvider.defaultModels`.
-    static let availableModels = AIProvider.openAI.defaultModels
-
-    static func supportsTemperature(_ model: String) -> Bool {
-        AIProvider.openAI.supportsTemperature(model)
-    }
-
     init(
         provider: AIProvider,
         model: String,

@@ -33,6 +33,7 @@ final class ImageAttachmentTests: XCTestCase {
             mimeType: .jpeg
         )
         let request = OpenAIRequest(
+            provider: .openAI,
             model: "gpt-4o-mini",
             instructions: "i",
             input: "Describe this",
@@ -55,6 +56,7 @@ final class ImageAttachmentTests: XCTestCase {
 
     func testTextOnlyPayloadKeepsStringInput() throws {
         let request = OpenAIRequest(
+            provider: .openAI,
             model: "gpt-4o-mini",
             instructions: "i",
             input: "hello",

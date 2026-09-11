@@ -2,14 +2,15 @@
 
 A native **macOS** AI interview assistant (codebase target still named Smarty). Cueglass listens to your mic, optionally reads the screen via OCR, and generates spoken-style answers into a floating overlay with best-effort screen-sharing exclusion.
 
-No accounts, no backend, no analytics. Paste an OpenAI API key in Settings (Keychain only) and go.
+No accounts, no backend, no analytics. Pick an AI provider in Settings, paste its API key (Keychain only), and go.
 
 ## Features
 
+- **Multiple AI providers** — OpenAI, Claude (Anthropic), Gemini (Google), or DeepSeek for answers; switch anytime in Settings → API. Each provider keeps its own key and model list, so switching doesn't lose the others.
 - **Whisper / Stream modes** — tap-to-record + Send, or Listen with pause detection
 - **Floating overlay** with best-effort blind mode (`sharingType = .none`)
 - **Region capture and answer** — press Control–Option–S, drag over a question, and release to send the cropped screenshot; Escape cancels
-- **Screen OCR** and **typed ask** with optional **image attachments** (multimodal)
+- **Screen OCR** and **typed ask** with optional **image attachments** (multimodal on OpenAI, Claude, and Gemini; DeepSeek is text-only)
 - **Role brief** — set the job title, field, company, and notes for the role you're interviewing for; answers are framed for that field (non-technical roles drop code, algorithms, and Big-O)
 - **Session presets** — interview focus, answer length, preferred coding language
 - **Key terms** panel and Markdown transcript export
@@ -20,7 +21,8 @@ No accounts, no backend, no analytics. Paste an OpenAI API key in Settings (Keyc
 - Apple Silicon Mac (recommended)
 - macOS 14.0+
 - Xcode 16+
-- OpenAI API key
+- An API key for at least one provider: [OpenAI](https://platform.openai.com/api-keys), [Anthropic](https://console.anthropic.com/settings/keys), [Google AI Studio (Gemini)](https://aistudio.google.com/apikey), or [DeepSeek](https://platform.deepseek.com/api_keys)
+- An OpenAI API key specifically if you want voice input (Whisper/Stream modes) — speech-to-text always uses OpenAI regardless of which provider you pick for answers
 
 ## Setup
 
@@ -39,17 +41,17 @@ No accounts, no backend, no analytics. Paste an OpenAI API key in Settings (Keyc
 
 4. Run (⌘R).
 
-5. **Settings → API** → paste your OpenAI API key → **Save**. The key is stored in **Keychain only** — never commit `.env` or key files (see `.gitignore`).
+5. **Settings → API** → pick a provider (OpenAI, Claude, Gemini, or DeepSeek), paste its API key → **Save**. Each provider's key is stored in **Keychain only**, under its own entry — never commit `.env` or key files (see `.gitignore`). Voice input (Whisper/Stream) needs an OpenAI key specifically, even if you answer with a different provider.
 
 6. Grant Microphone / Speech / Screen Recording when prompted.
 
 ## Privacy
 
 - Screenshots and attachment frames are processed in memory (not written as a capture archive)
-- API key lives in Keychain
+- Each provider's API key lives in its own Keychain entry
 - Settings, history, and window frame use UserDefaults
-- Only OpenAI API traffic leaves the machine
-- Region screenshots are sent to OpenAI for visual answering, with optional OCR; typed drafts and pending attachments remain separate
+- Only traffic to your selected AI provider (and OpenAI, for voice input) leaves the machine
+- Region screenshots are sent to your selected provider for visual answering (OpenAI, Claude, and Gemini support this; DeepSeek is text-only), with optional OCR; typed drafts and pending attachments remain separate
 - No authentication / cloud account for Cueglass itself
 
 Blind mode requests exclusion for the selection panels and answer overlay before they appear.
@@ -92,22 +94,28 @@ for microphone and screen-recording setup; Settings and Permissions never open a
 App/            SwiftUI entry + DI (AppEnvironment)
 Views/          Permissions, ask field, role editing, history
 Overlay/        Non-activating NSPanel + glass UI
-Settings/       API, capture, overlay, prompt presets, general
+Settings/       Provider/API, capture, overlay, prompt presets, general
 Managers/       InterviewSessionManager, OverlayManager
 ScreenCapture/  ScreenCaptureKit frames (in-memory)
 OCR/            Vision text extraction
 Speech/         Mic capture + OpenAI STT / pause detection
-OpenAI/         Responses API (text + multimodal images)
+OpenAI/         AIProviderClienting protocol + OpenAI Responses API client (text + multimodal + STT)
+AIProviders/    AIClientRouter, plus Claude / Gemini / DeepSeek clients
 PromptBuilder/  Context store, summarization, prompt assembly
-Services/       Keychain, settings, permissions, hotkeys, login item
-Models/         Shared types (settings, attachments, messages)
+Services/       Keychain (per-provider keys), settings, permissions, hotkeys, login item
+Models/         Shared types (settings, AIProvider, attachments, messages)
 ```
+
+Answer generation is provider-agnostic: `InterviewSessionManager` and `ContextSummarizer` depend on
+`AIProviderClienting`, and `AIClientRouter` dispatches each request to the client for the currently
+selected `AIProvider`. Speech-to-text is the one exception — it always goes through `OpenAIClient`
+directly, since none of the other three vendors offer an equivalent transcription API today.
 
 MVVM: views bind to `@Observable` managers; capture / OCR / OpenAI run in actors.
 
 ## Secrets
 
-See `.env.example`. **`OPENAI_API_KEY` must never be committed.** Enter the key in Settings so it is stored in Keychain. `.gitignore` already excludes `.env`, key files, and Xcode user state (`xcuserdata/`, `*.xcuserstate`).
+See `.env.example`. **No provider API key should ever be committed.** Enter each key in Settings → API so it is stored in Keychain (one entry per provider). `.gitignore` already excludes `.env`, key files, and Xcode user state (`xcuserdata/`, `*.xcuserstate`).
 
 ## Build / test
 

@@ -30,7 +30,8 @@ final class OpenAIClientTests: XCTestCase {
         var assembled = ""
         for try await delta in await client.streamResponse(
             apiKey: "sk-test",
-            request: OpenAIRequest(model: "gpt-4o-mini", instructions: "i", input: "q", temperature: 0.7, stream: true)
+            request: OpenAIRequest(
+            provider: .openAI, model: "gpt-4o-mini", instructions: "i", input: "q", temperature: 0.7, stream: true)
         ) {
             assembled += delta
         }
@@ -46,7 +47,8 @@ final class OpenAIClientTests: XCTestCase {
         do {
             _ = try await client.complete(
                 apiKey: "bad",
-                request: OpenAIRequest(model: "gpt-4o-mini", instructions: "i", input: "q", temperature: 0.2, stream: false)
+                request: OpenAIRequest(
+            provider: .openAI, model: "gpt-4o-mini", instructions: "i", input: "q", temperature: 0.2, stream: false)
             )
             XCTFail("Expected error")
         } catch let error as OpenAIError {
@@ -65,15 +67,16 @@ final class OpenAIClientTests: XCTestCase {
         let client = OpenAIClient(session: mockSession())
         let text = try await client.complete(
             apiKey: "sk",
-            request: OpenAIRequest(model: "gpt-4o-mini", instructions: "i", input: "q", temperature: 0.2, stream: false)
+            request: OpenAIRequest(
+            provider: .openAI, model: "gpt-4o-mini", instructions: "i", input: "q", temperature: 0.2, stream: false)
         )
         XCTAssertEqual(text, "Answer")
     }
 
     func testSupportsTemperatureHelper() {
-        XCTAssertTrue(AppSettings.supportsTemperature("gpt-4o-mini"))
-        XCTAssertFalse(AppSettings.supportsTemperature("o4-mini"))
-        XCTAssertFalse(AppSettings.supportsTemperature("o1-preview"))
+        XCTAssertTrue(AIProvider.openAI.supportsTemperature("gpt-4o-mini"))
+        XCTAssertFalse(AIProvider.openAI.supportsTemperature("o4-mini"))
+        XCTAssertFalse(AIProvider.openAI.supportsTemperature("o1-preview"))
     }
 
     private func mockSession() -> URLSession {

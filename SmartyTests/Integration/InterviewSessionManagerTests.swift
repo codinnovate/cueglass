@@ -19,7 +19,7 @@ final class InterviewSessionManagerTests: XCTestCase {
         defaults.removePersistentDomain(forName: suite)
         let keychain = FakeKeychain()
         settingsStore = SettingsStore(defaults: defaults, keychain: keychain)
-        _ = settingsStore.saveAPIKey("sk-test")
+        _ = settingsStore.saveAPIKey("sk-test", for: .openAI)
         // Existing Listen/pause tests run in Stream mode; Whisper is the app default.
         settingsStore.update { $0.assistantMode = .stream }
         permissions = FakePermissionService()
@@ -33,13 +33,13 @@ final class InterviewSessionManagerTests: XCTestCase {
             screenCapture: capture,
             ocr: ocr,
             speech: speech,
-            openAI: openAI,
+            aiClient: openAI,
             contextStore: ContextStore()
         )
     }
 
     func testListenWithoutAPIKeyErrors() async {
-        _ = settingsStore.saveAPIKey("")
+        _ = settingsStore.saveAPIKey("", for: .openAI)
         await manager.listenOnce()
         guard case .error(let message) = manager.status else {
             return XCTFail("Expected error status")
@@ -390,10 +390,10 @@ final class InterviewSessionManagerTests: XCTestCase {
     }
 
     func testRegionPreflightReportsMissingSetupWithoutPrompting() {
-        _ = settingsStore.saveAPIKey("")
+        _ = settingsStore.saveAPIKey("", for: .openAI)
         XCTAssertNil(manager.beginRegionCapture())
         XCTAssertTrue(manager.lastErrorMessage?.contains("API key") == true)
-        _ = settingsStore.saveAPIKey("sk-test")
+        _ = settingsStore.saveAPIKey("sk-test", for: .openAI)
         permissions.screenGranted = false
         XCTAssertNil(manager.beginRegionCapture())
         XCTAssertTrue(manager.lastErrorMessage?.contains("Screen Recording") == true)

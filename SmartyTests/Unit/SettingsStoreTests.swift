@@ -12,16 +12,31 @@ final class SettingsStoreTests: XCTestCase {
         let store = SettingsStore(defaults: defaults, keychain: keychain)
         XCTAssertFalse(store.hasAPIKey)
 
-        let result = store.saveAPIKey(" sk-test-123 ")
+        let result = store.saveAPIKey(" sk-test-123 ", for: .openAI)
         XCTAssertTrue(result.isSuccess)
         XCTAssertTrue(store.hasAPIKey)
         XCTAssertEqual(store.apiKey, "sk-test-123")
 
-        store.reloadAPIKeyFromKeychain()
+        store.reloadAPIKeysFromKeychain()
         XCTAssertEqual(store.apiKey, "sk-test-123")
 
-        _ = store.saveAPIKey("")
+        _ = store.saveAPIKey("", for: .openAI)
         XCTAssertFalse(store.hasAPIKey)
+    }
+
+    func testKeysAreIndependentPerProvider() {
+        let keychain = FakeKeychain()
+        let suite = "smarty.tests.settings.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+
+        let store = SettingsStore(defaults: defaults, keychain: keychain)
+        _ = store.saveAPIKey("sk-openai", for: .openAI)
+        _ = store.saveAPIKey("sk-anthropic", for: .anthropic)
+
+        XCTAssertEqual(store.apiKey(for: .openAI), "sk-openai")
+        XCTAssertEqual(store.apiKey(for: .anthropic), "sk-anthropic")
+        XCTAssertFalse(store.hasAPIKey(for: .gemini))
     }
 
     func testDecodesNewPresetFieldsWithDefaults() throws {
