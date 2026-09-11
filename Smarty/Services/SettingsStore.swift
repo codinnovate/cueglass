@@ -83,14 +83,16 @@ final class SettingsStore {
         update { $0.promptTemplate = AppSettings.defaultPromptTemplate }
     }
 
-    /// Upgrade older saved prompts that still discourage multi-variant coding answers
-    /// or lack the mandatory inline technical-explanation Markdown format.
+    /// Upgrade older saved prompts that still discourage multi-variant coding answers,
+    /// lack the mandatory inline technical-explanation Markdown format,
+    /// or predate the role brief (they assumed every interview was a software one).
     func migratePromptTemplateIfNeeded() {
         let current = settings.promptTemplate
         let needsUpgrade = current.contains("Never dump large code blocks")
             || (!current.contains("multiple solution variations")
                 && current.contains("For coding interviews:"))
             || !current.contains("INLINE TECHNICAL EXPLANATIONS")
+            || !current.contains("Follow the role brief")
         guard needsUpgrade else { return }
         resetPromptTemplate()
     }

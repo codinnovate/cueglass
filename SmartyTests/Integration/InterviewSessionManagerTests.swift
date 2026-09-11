@@ -341,6 +341,166 @@ final class InterviewSessionManagerTests: XCTestCase {
     }
 
 
+    private var testRegion: ScreenRegion {
+        ScreenRegion(displayID: 42, rect: CGRect(x: 20, y: 30, width: 200, height: 100))
+    }
+
+    func testRegionQuestionSendsImageWithoutOCRAndPreservesAttachments() async throws {
+        await capture.setFrame(Self.makeCGImage())
+        await ocr.setText(nil)
+        let pending = ImageAttachment(data: Data([1, 2, 3]), mimeType: .png)
+        _ = manager.addImage(pending)
+        let id = try XCTUnwrap(manager.beginRegionCapture())
+        await manager.solveSelectedRegion(testRegion, captureID: id)
+        await waitUntil(timeout: 2) { !self.manager.currentAnswer.isEmpty }
+
+        let requests = await openAI.imageRequests
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests.first?.images.count, 1)
+        XCTAssertNotNil(requests.first?.images.first?.makeCGImage())
+        XCTAssertTrue(requests.first?.input.contains("selected screenshot") == true)
+        XCTAssertEqual(manager.pendingImages, [pending])
+        XCTAssertEqual(manager.answeredTurns.first?.question, "Selected screenshot question")
+        XCTAssertFalse(manager.isRunning)
+        XCTAssertEqual(speech.startCount, 0)
+        XCTAssertEqual(permissions.screenRequestCount, 0)
+        let captured = await capture.regionRequests
+        XCTAssertEqual(captured, [testRegion])
+    }
+
+    func testRegionOCRFailureStillSendsImage() async throws {
+        await capture.setFrame(Self.makeCGImage())
+        await ocr.setShouldFail(true)
+        let id = try XCTUnwrap(manager.beginRegionCapture())
+        await manager.solveSelectedRegion(testRegion, captureID: id)
+        await waitUntil(timeout: 2) { !self.manager.currentAnswer.isEmpty }
+        let requests = await openAI.imageRequests
+        XCTAssertEqual(requests.count, 1)
+    }
+
+    func testRegionOCRIncludedWithImage() async throws {
+        await capture.setFrame(Self.makeCGImage())
+        await ocr.setText("Find the area of this triangle")
+        let id = try XCTUnwrap(manager.beginRegionCapture())
+        await manager.solveSelectedRegion(testRegion, captureID: id)
+        await waitUntil(timeout: 2) { !self.manager.currentAnswer.isEmpty }
+        let requests = await openAI.imageRequests
+        XCTAssertTrue(requests.first?.input.contains("Find the area of this triangle") == true)
+        XCTAssertEqual(manager.answeredTurns.first?.question, "Find the area of this triangle")
+    }
+
+    func testRegionPreflightReportsMissingSetupWithoutPrompting() {
+        _ = settingsStore.saveAPIKey("")
+        XCTAssertNil(manager.beginRegionCapture())
+        XCTAssertTrue(manager.lastErrorMessage?.contains("API key") == true)
+        _ = settingsStore.saveAPIKey("sk-test")
+        permissions.screenGranted = false
+        XCTAssertNil(manager.beginRegionCapture())
+        XCTAssertTrue(manager.lastErrorMessage?.contains("Screen Recording") == true)
+        XCTAssertEqual(permissions.screenRequestCount, 0)
+        XCTAssertNil(manager.regionCaptureMessage)
+    }
+
+    func testRegionCannotBeginWhilePausedOrGenerating() async {
+        await manager.listenOnce()
+        manager.pause()
+        XCTAssertNil(manager.beginRegionCapture())
+        XCTAssertEqual(manager.status, .paused)
+        manager.resume()
+        await openAI.setCompleteDelayNanoseconds(200_000_000)
+        await manager.askTyped("Existing question")
+        XCTAssertEqual(manager.status, .thinking)
+        XCTAssertNil(manager.beginRegionCapture())
+        XCTAssertEqual(manager.status, .thinking)
+        await waitUntil(timeout: 2) { !self.manager.currentAnswer.isEmpty }
+    }
+
+    func testRepeatedCaptureAndCancelledTokenCannotSubmit() async throws {
+        let id = try XCTUnwrap(manager.beginRegionCapture())
+        XCTAssertNil(manager.beginRegionCapture())
+        manager.cancelRegionCapture()
+        await manager.solveSelectedRegion(testRegion, captureID: id)
+        let captured = await capture.regionRequests
+        XCTAssertTrue(captured.isEmpty)
+        let calls = await openAI.callCount()
+        XCTAssertEqual(calls, 0)
+        XCTAssertNil(manager.regionCaptureMessage)
+        XCTAssertNotNil(manager.beginRegionCapture())
+        manager.cancelRegionCapture()
+    }
+
+    func testCancellationDuringCaptureDoesNotAnswerOrClearNewSelection() async throws {
+        await capture.setFrame(Self.makeCGImage())
+        await capture.setRegionDelay(100_000_000)
+        let id = try XCTUnwrap(manager.beginRegionCapture())
+        let task = Task { await manager.solveSelectedRegion(testRegion, captureID: id) }
+        await waitForRegionCaptureStart()
+        manager.cancelRegionCapture()
+        let newID = try XCTUnwrap(manager.beginRegionCapture())
+        await task.value
+        XCTAssertNotNil(manager.regionCaptureMessage)
+        XCTAssertNotEqual(id, newID)
+        let calls = await openAI.callCount()
+        XCTAssertEqual(calls, 0)
+        manager.cancelRegionCapture()
+    }
+
+    func testCaptureFailureClearsReservationAndAllowsRetry() async throws {
+        let id = try XCTUnwrap(manager.beginRegionCapture())
+        await manager.solveSelectedRegion(testRegion, captureID: id)
+        XCTAssertNotNil(manager.lastErrorMessage)
+        XCTAssertNil(manager.regionCaptureMessage)
+        XCTAssertNotNil(manager.beginRegionCapture())
+        manager.cancelRegionCapture()
+    }
+
+    func testStoppingDuringRegionCapturePreventsAnswer() async throws {
+        await capture.setFrame(Self.makeCGImage())
+        await capture.setRegionDelay(100_000_000)
+        let id = try XCTUnwrap(manager.beginRegionCapture())
+        let task = Task { await manager.solveSelectedRegion(testRegion, captureID: id) }
+        await waitForRegionCaptureStart()
+        await manager.stopSession()
+        await task.value
+        let calls = await openAI.callCount()
+        XCTAssertEqual(calls, 0)
+        XCTAssertEqual(manager.status, .idle)
+        XCTAssertNil(manager.regionCaptureMessage)
+    }
+
+    func testRegionAPIFailureIsReportedAndRecovers() async throws {
+        await capture.setFrame(Self.makeCGImage())
+        await openAI.setError(URLError(.notConnectedToInternet))
+        let id = try XCTUnwrap(manager.beginRegionCapture())
+        await manager.solveSelectedRegion(testRegion, captureID: id)
+        await waitUntil(timeout: 2) { self.manager.lastErrorMessage != nil }
+        XCTAssertNil(manager.regionCaptureMessage)
+        await waitUntil(timeout: 3) { self.manager.status == .idle }
+    }
+
+    func testTypedAndAskNowSubmissionsLeavePendingImagesWhileSelecting() async throws {
+        await manager.startSession()
+        let image = ImageAttachment(data: Data([1, 2, 3]), mimeType: .png)
+        _ = manager.addImage(image)
+        _ = try XCTUnwrap(manager.beginRegionCapture())
+        await manager.askTyped("My draft")
+        await manager.askNow()
+        XCTAssertEqual(manager.pendingImages, [image])
+        let calls = await openAI.callCount()
+        XCTAssertEqual(calls, 0)
+        manager.cancelRegionCapture()
+        await manager.stopSession()
+    }
+
+    private func waitForRegionCaptureStart() async {
+        let deadline = Date().addingTimeInterval(1)
+        while Date() < deadline {
+            if !(await capture.regionRequests).isEmpty { return }
+            await Task.yield()
+        }
+        XCTFail("Region capture did not begin")
+    }
+
     @discardableResult
     private func waitUntil(timeout: TimeInterval, condition: @escaping @MainActor () -> Bool) async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)

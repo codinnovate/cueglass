@@ -15,7 +15,7 @@ struct SettingsView: View {
                 .tabItem { Label("Overlay", systemImage: "menubar.rectangle") }
 
             PromptSettingsSection()
-                .tabItem { Label("Prompt", systemImage: "text.alignleft") }
+                .tabItem { Label("Role & Prompt", systemImage: "person.text.rectangle") }
 
             GeneralSettingsSection()
                 .tabItem { Label("General", systemImage: "gearshape") }
@@ -282,13 +282,13 @@ struct OverlaySettingsSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Toggle("Blind mode (hide from screen share)", isOn: Binding(
+                Toggle("Blind mode (best-effort exclusion)", isOn: Binding(
                     get: { store.settings.blindModeEnabled },
                     set: { value in
                         appEnvironment.overlayManager.setBlindMode(value, session: appEnvironment.session)
                     }
                 ))
-                Text("On by default. Uses window sharing exclusion so Zoom/Meet usually won’t show Cueglass.")
+                Text("On by default. Requests window exclusion, but selection controls and answers may still appear in screen shares. Cursor movements and changes in other apps are not hidden.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -320,6 +320,8 @@ struct OverlaySettingsSection: View {
             }
 
             Section("Shortcuts") {
+                LabeledContent("Capture Region and Answer", value: "⌃⌥S")
+                Text("Press Control–Option–S, drag over a question, and release to answer. Escape cancels. Screen Recording access must already be enabled.")
                 LabeledContent("Show / Hide Overlay", value: "⌘⇧H")
                 LabeledContent("Pause / Resume", value: "⌘⇧P")
                 LabeledContent("Start Session", value: "⌘⇧S")
@@ -335,6 +337,10 @@ struct PromptSettingsSection: View {
 
     var body: some View {
         Form {
+            Section("Role You're Interviewing For") {
+                RoleFields(store: store)
+            }
+
             Section("Session Presets") {
                 Picker("Interview focus", selection: Binding(
                     get: { store.settings.interviewFocus },
@@ -404,6 +410,7 @@ struct PromptSettingsSection: View {
 struct GeneralSettingsSection: View {
     @Environment(AppEnvironment.self) private var appEnvironment
     @State private var launchError: String?
+    @State private var showPermissions = false
 
     private var store: SettingsStore { appEnvironment.settingsStore }
 
@@ -429,6 +436,26 @@ struct GeneralSettingsSection: View {
                 }
             }
 
+            Section("Menu Bar") {
+                Toggle("Show menu bar icon", isOn: Binding(
+                    get: { store.settings.showMenuBarIcon },
+                    set: { enabled in
+                        store.update { $0.showMenuBarIcon = enabled }
+                        appEnvironment.applyMenuBarIconSetting()
+                    }
+                ))
+                Text("The menu bar toggles the overlay and opens Settings. If hidden, press ⌘⇧H to restore the overlay. Blind mode does not hide the menu bar itself.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Permissions") {
+                Button("Permissions…") { showPermissions = true }
+                Text("Manage microphone, speech recognition, and screen recording access.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Data") {
                 Button("Export Transcript as Markdown") {
                     appEnvironment.session.copyTranscriptMarkdown()
@@ -442,12 +469,20 @@ struct GeneralSettingsSection: View {
 
             Section("About") {
                 LabeledContent("Version", value: "1.0.0")
-                Text("Blind mode uses NSWindow.sharingType = .none. Most meeting apps hide Cueglass; some full-display ScreenCaptureKit capturers on macOS 15+ may still show composited pixels.")
+                Text("Blind mode requests exclusion using a legacy macOS window setting. It cannot guarantee invisibility in Meet, Zoom, Teams, assessment platforms, or other recording apps. Verify the remote viewer’s output for your exact setup; macOS permission indicators may remain visible.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+        .sheet(isPresented: $showPermissions) {
+            PermissionGuideView()
+                .environment(appEnvironment)
+                .frame(width: 460, height: 420)
+                .onAppear {
+                    appEnvironment.overlayManager.applyScreenShareExclusionToAllWindows()
+                }
+        }
     }
 }
 

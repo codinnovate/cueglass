@@ -6,17 +6,19 @@ struct PromptBuilder: Sendable {
         snapshot: ContextSnapshot,
         preferredLanguage: PreferredProgrammingLanguage = .python,
         interviewFocus: InterviewFocus = .mixed,
-        answerLength: AnswerLength = .standard
+        answerLength: AnswerLength = .standard,
+        role: RoleProfile = .default
     ) -> (instructions: String, input: String) {
         var instructions = systemTemplate.trimmed.isEmpty
             ? AppSettings.defaultPromptTemplate
             : systemTemplate
 
         var guidance: [String] = [
+            role.promptGuidance,
             interviewFocus.promptGuidance,
             answerLength.promptGuidance
         ]
-        if let languageLine = preferredLanguage.codingInstruction {
+        if role.expectsCoding, let languageLine = preferredLanguage.codingInstruction {
             guidance.append(languageLine)
         }
         instructions += "\n\n" + guidance.joined(separator: "\n")
@@ -43,18 +45,23 @@ struct PromptBuilder: Sendable {
             sections.append("## Recent assistant answers\n\(history)")
         }
 
-        sections.append(
-            """
-            ## Task
-            Using the interview context above, craft the next answer for the candidate as spoken conversational words —
-            an explanation they can read aloud, not a formal description. Prefer natural first-person talk.
-            Light everyday grammar is fine; keep technical terms accurate.
+        var task = """
+        ## Task
+        Using the interview context above, craft the next answer for the candidate as spoken conversational words —
+        an explanation they can read aloud, not a formal description. Prefer natural first-person talk.
+        Light everyday grammar is fine; keep domain terms accurate.
 
-            Prefer the spoken transcript as the question when both speech and OCR are present.
-            Screen OCR is supporting context only unless the user explicitly asked to solve the screen.
+        Prefer the spoken transcript as the question when both speech and OCR are present.
+        Screen OCR is supporting context only unless the user explicitly asked to solve the screen.
 
-            Speech transcripts may contain ASR errors, especially with accents or technical terms.
-            Infer the intended interview question (e.g. "active fiber" / "virtual" → React Fiber vs Virtual DOM) using context; do not answer the garbled literal if a clear tech topic is obvious.
+        Speech transcripts may contain ASR errors, especially with accents or specialist terms.
+        Infer the intended interview question from the role and the context; do not answer the garbled literal
+        when the intended topic is obvious.
+        """
+
+        if role.expectsCoding {
+            task += """
+
 
             If this is an algorithm, coding, or DSA problem (spoken, typed, or on-screen OCR):
             - Always provide multiple solution variations when possible (typically 2–3) — every time.
@@ -62,11 +69,17 @@ struct PromptBuilder: Sendable {
             - For each variation: brief spoken-style approach, time/space complexity, then a focused fenced code block.
             - Label each variation clearly.
             - Use markdown as needed for structure, examples, and code.
-
-            If this is behavioral or conversational (not a coding problem):
-            - Respond with one natural first-person spoken answer only — no preamble, no labels, no markdown headings.
             """
-        )
+        }
+
+        task += """
+
+
+        If this is behavioral or conversational (not a technical exercise):
+        - Respond with one natural first-person spoken answer only — no preamble, no labels, no markdown headings.
+        """
+
+        sections.append(task)
 
         var input = sections.joined(separator: "\n\n")
         let budget = max(500, snapshot.maxTokens - TokenEstimator.estimateTokens(in: instructions) - 200)
@@ -84,10 +97,11 @@ struct PromptBuilder: Sendable {
     static func sessionGuidance(
         language: PreferredProgrammingLanguage,
         focus: InterviewFocus,
-        length: AnswerLength
+        length: AnswerLength,
+        role: RoleProfile = .default
     ) -> String {
-        var lines = [focus.promptGuidance, length.promptGuidance]
-        if let languageLine = language.codingInstruction {
+        var lines = [role.promptGuidance, focus.promptGuidance, length.promptGuidance]
+        if role.expectsCoding, let languageLine = language.codingInstruction {
             lines.append(languageLine)
         }
         return lines.joined(separator: "\n")

@@ -7,22 +7,16 @@ struct SmartyApp: App {
     private var appEnvironment: AppEnvironment { .shared }
 
     var body: some Scene {
-        WindowGroup("Smarty") {
-            ContentView()
+        // AppDelegate launches the AppKit overlay; Settings opens only on request.
+        Settings {
+            SettingsView()
                 .environment(appEnvironment)
                 .preferredColorScheme(.dark)
-                .background(Color.black)
+                .frame(minWidth: 560, minHeight: 520)
                 .onAppear {
-                    appDelegate.environment = appEnvironment
-                    appEnvironment.bootstrap()
-                }
-                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     appEnvironment.settingsStore.reloadAPIKeyFromKeychain()
                 }
         }
-        .defaultSize(width: 480, height: 420)
-        .windowStyle(.automatic)
-        .windowResizability(.contentSize)
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandMenu("Session") {
@@ -47,15 +41,6 @@ struct SmartyApp: App {
                 }
                 .keyboardShortcut("p", modifiers: [.command, .shift])
             }
-        }
-
-        Settings {
-            SettingsView()
-                .environment(AppEnvironment.shared)
-                .frame(minWidth: 560, minHeight: 520)
-                .onAppear {
-                    AppEnvironment.shared.settingsStore.reloadAPIKeyFromKeychain()
-                }
         }
     }
 }

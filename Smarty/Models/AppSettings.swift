@@ -14,10 +14,13 @@ struct AppSettings: Codable, Equatable, Sendable {
     var launchAtLogin: Bool
     var clickThroughEnabled: Bool
     var positionLocked: Bool
-    /// When true, windows use `sharingType = .none` so most meeting apps hide Smarty.
+    /// Requests best-effort window exclusion; recording apps may still capture Smarty.
     var blindModeEnabled: Bool
     /// When true, the status badge pulses while listening / thinking.
     var statusBlinkEnabled: Bool
+    /// Menu bar item; the overlay can also be restored using ⌘⇧H or by reopening the app.
+    /// Note the menu bar itself is never hidden by blind mode; turn this off for a clean share.
+    var showMenuBarIcon: Bool
     /// Whisper = manual record/send; Stream = Listen + pause VAD (legacy session UI).
     var assistantMode: AssistantMode
     var overlayFrame: CodableRect?
@@ -27,14 +30,19 @@ struct AppSettings: Codable, Equatable, Sendable {
     var preferredProgrammingLanguage: PreferredProgrammingLanguage
     var interviewFocus: InterviewFocus
     var answerLength: AnswerLength
+    /// The role the candidate is interviewing for — drives how every answer is framed.
+    var roleProfile: RoleProfile
 
     static let defaultPromptTemplate = """
     You are a discreet interview assistant helping the candidate answer live interview questions.
 
+    Follow the role brief supplied below: the candidate may be interviewing for any kind of job,
+    not only software. Use that role's vocabulary, frameworks, and measures of success.
+
     Write answers as spoken conversational explanations the candidate can read aloud —
     like talking through the idea with the interviewer, not a stiff textbook description.
     First person. Natural cadence. Light everyday grammar is fine (contractions, short sentences).
-    Technical terms must stay precise and correct — never invent or blur jargon.
+    Domain terms must stay precise and correct — never invent or blur jargon.
     Markdown is welcome for structure, short lists, examples, and fenced code when it helps.
     Avoid bullet points for purely behavioral answers unless the interviewer asks for a list.
     Keep answers concise enough to speak in about 30–90 seconds (coding solutions may run longer).
@@ -42,13 +50,17 @@ struct AppSettings: Codable, Equatable, Sendable {
     Do not invent specific employers, projects, metrics, or technologies that are not in the provided context.
     If information is missing, give a generic but believable professional answer.
 
-    For coding / algorithm / DSA interviews:
+    For coding / algorithm / DSA interviews (only when the role is a technical one):
     - Always give multiple solution variations when possible (usually 2–3), every time.
     - Typical set: (1) brute-force / straightforward, (2) optimal, (3) an alternate approach or tradeoff when useful.
     - For each variation: short spoken-style approach, time/space complexity, then a focused fenced code block.
     - Label variations clearly (e.g. Variation 1 — Brute force).
     - Prefer readable interview-style code over huge dumps.
     - Still follow all honesty and context rules above.
+
+    For non-technical roles:
+    - Do not volunteer code, algorithms, or complexity analysis.
+    - Answer with the tools of that field: frameworks, process, metrics, case structure, or a worked calculation.
 
     For behavioral interviews:
     - Use STAR structure internally (Situation, Task, Action, Result).
@@ -72,6 +84,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         positionLocked: false,
         blindModeEnabled: true,
         statusBlinkEnabled: true,
+        showMenuBarIcon: true,
         assistantMode: .whisper,
         overlayFrame: nil,
         minRequestInterval: 1.0,
@@ -79,7 +92,8 @@ struct AppSettings: Codable, Equatable, Sendable {
         maxContextTokens: 6000,
         preferredProgrammingLanguage: .python,
         interviewFocus: .mixed,
-        answerLength: .standard
+        answerLength: .standard,
+        roleProfile: .default
     )
 
     static let availableModels = [
@@ -108,6 +122,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         positionLocked: Bool,
         blindModeEnabled: Bool,
         statusBlinkEnabled: Bool,
+        showMenuBarIcon: Bool = true,
         assistantMode: AssistantMode,
         overlayFrame: CodableRect?,
         minRequestInterval: TimeInterval,
@@ -115,7 +130,8 @@ struct AppSettings: Codable, Equatable, Sendable {
         maxContextTokens: Int,
         preferredProgrammingLanguage: PreferredProgrammingLanguage,
         interviewFocus: InterviewFocus,
-        answerLength: AnswerLength
+        answerLength: AnswerLength,
+        roleProfile: RoleProfile = .default
     ) {
         self.model = model
         self.temperature = temperature
@@ -131,6 +147,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         self.positionLocked = positionLocked
         self.blindModeEnabled = blindModeEnabled
         self.statusBlinkEnabled = statusBlinkEnabled
+        self.showMenuBarIcon = showMenuBarIcon
         self.assistantMode = assistantMode
         self.overlayFrame = overlayFrame
         self.minRequestInterval = minRequestInterval
@@ -139,6 +156,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         self.preferredProgrammingLanguage = preferredProgrammingLanguage
         self.interviewFocus = interviewFocus
         self.answerLength = answerLength
+        self.roleProfile = roleProfile
     }
 
     init(from decoder: Decoder) throws {
@@ -158,6 +176,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         positionLocked = try c.decodeIfPresent(Bool.self, forKey: .positionLocked) ?? d.positionLocked
         blindModeEnabled = try c.decodeIfPresent(Bool.self, forKey: .blindModeEnabled) ?? true
         statusBlinkEnabled = try c.decodeIfPresent(Bool.self, forKey: .statusBlinkEnabled) ?? true
+        showMenuBarIcon = try c.decodeIfPresent(Bool.self, forKey: .showMenuBarIcon) ?? true
         assistantMode = try c.decodeIfPresent(AssistantMode.self, forKey: .assistantMode) ?? .whisper
         overlayFrame = try c.decodeIfPresent(CodableRect.self, forKey: .overlayFrame)
         minRequestInterval = try c.decodeIfPresent(TimeInterval.self, forKey: .minRequestInterval) ?? d.minRequestInterval
@@ -166,6 +185,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         preferredProgrammingLanguage = try c.decodeIfPresent(PreferredProgrammingLanguage.self, forKey: .preferredProgrammingLanguage) ?? d.preferredProgrammingLanguage
         interviewFocus = try c.decodeIfPresent(InterviewFocus.self, forKey: .interviewFocus) ?? d.interviewFocus
         answerLength = try c.decodeIfPresent(AnswerLength.self, forKey: .answerLength) ?? d.answerLength
+        roleProfile = try c.decodeIfPresent(RoleProfile.self, forKey: .roleProfile) ?? d.roleProfile
     }
 }
 

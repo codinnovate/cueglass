@@ -5,6 +5,7 @@ import Foundation
 enum HotkeyAction: UInt32, CaseIterable, Sendable {
     case toggleOverlay = 1
     case togglePause = 2
+    case captureRegion = 3
 }
 
 /// Nonisolated relay so Carbon callbacks never touch a @MainActor object off-queue.
@@ -61,10 +62,12 @@ final class HotkeyService {
 
     func registerDefaults(
         onToggleOverlay: @escaping () -> Void,
-        onTogglePause: @escaping () -> Void
-    ) {
+        onTogglePause: @escaping () -> Void,
+        onCaptureRegion: @escaping () -> Void
+    ) -> Bool {
         HotkeyRelay.shared.setHandler(id: HotkeyAction.toggleOverlay.rawValue, handler: onToggleOverlay)
         HotkeyRelay.shared.setHandler(id: HotkeyAction.togglePause.rawValue, handler: onTogglePause)
+        HotkeyRelay.shared.setHandler(id: HotkeyAction.captureRegion.rawValue, handler: onCaptureRegion)
 
         installHandlerIfNeeded()
 
@@ -78,6 +81,7 @@ final class HotkeyService {
             keyCode: UInt32(kVK_ANSI_P),
             modifiers: UInt32(cmdKey | shiftKey)
         )
+        return register(action: .captureRegion, keyCode: UInt32(kVK_ANSI_S), modifiers: UInt32(controlKey | optionKey))
     }
 
     func unregisterAll() {
@@ -92,7 +96,9 @@ final class HotkeyService {
         }
     }
 
-    private func register(action: HotkeyAction, keyCode: UInt32, modifiers: UInt32) {
+    @discardableResult
+    private func register(action: HotkeyAction, keyCode: UInt32, modifiers: UInt32) -> Bool {
+        guard handlerRef != nil else { return false }
         if let existing = hotKeyRefs[action] {
             UnregisterEventHotKey(existing)
             hotKeyRefs[action] = nil
@@ -110,9 +116,10 @@ final class HotkeyService {
         )
         guard status == noErr, let hotKeyRef else {
             AppLog.overlay.error("Failed to register hotkey \(action.rawValue)")
-            return
+            return false
         }
         hotKeyRefs[action] = hotKeyRef
+        return true
     }
 
     private func installHandlerIfNeeded() {

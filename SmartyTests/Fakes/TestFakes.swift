@@ -7,10 +7,14 @@ final class FakePermissionService: PermissionChecking {
     var micGranted = true
     var speechGranted = true
     var screenGranted = true
+    private(set) var screenRequestCount = 0
 
     func requestMicrophone() async -> Bool { micGranted }
     func requestSpeechRecognition() async -> Bool { speechGranted }
-    func requestScreenRecording() async -> Bool { screenGranted }
+    func requestScreenRecording() async -> Bool {
+        screenRequestCount += 1
+        return screenGranted
+    }
     func requestAll() async -> (mic: Bool, speech: Bool, screen: Bool) {
         (micGranted, speechGranted, screenGranted)
     }
@@ -112,6 +116,8 @@ actor FakeScreenCapture: ScreenCapturing {
     var frame: CGImage?
     var shouldFail = false
     private(set) var startCount = 0
+    private(set) var regionRequests: [ScreenRegion] = []
+    var regionDelayNanoseconds: UInt64 = 0
 
     func availableDisplays() async throws -> [DisplayInfo] {
         [DisplayInfo(id: 1, name: "Test", width: 100, height: 100)]
@@ -134,14 +140,24 @@ actor FakeScreenCapture: ScreenCapturing {
     func setFrame(_ value: CGImage?) {
         frame = value
     }
+
+    func captureRegion(displayID: UInt32, rect: CGRect) async throws -> CGImage {
+        regionRequests.append(ScreenRegion(displayID: displayID, rect: rect))
+        if regionDelayNanoseconds > 0 { try await Task.sleep(nanoseconds: regionDelayNanoseconds) }
+        return try await captureFrame(displayID: displayID)
+    }
+
+    func setRegionDelay(_ value: UInt64) { regionDelayNanoseconds = value }
 }
 
 actor FakeOCR: OCRProcessing {
     var text: String?
     private(set) var resetCount = 0
+    var shouldFail = false
 
     func recognizeText(in image: CGImage, accuracy: OCRAccuracy) async throws -> String? {
-        text
+        if shouldFail { throw ScreenCaptureError.invalidRegion }
+        return text
     }
 
     func reset() async {
@@ -151,6 +167,8 @@ actor FakeOCR: OCRProcessing {
     func setText(_ value: String?) {
         text = value
     }
+
+    func setShouldFail(_ value: Bool) { shouldFail = value }
 }
 
 actor FakeOpenAI: OpenAIClienting {
@@ -162,6 +180,7 @@ actor FakeOpenAI: OpenAIClienting {
     private(set) var streamCallCount = 0
     private(set) var answerCompleteCallCount = 0
     private(set) var lastRequest: OpenAIRequest?
+    private(set) var imageRequests: [OpenAIRequest] = []
 
     func streamResponse(apiKey: String, request: OpenAIRequest) -> AsyncThrowingStream<String, Error> {
         streamCallCount += 1
@@ -184,6 +203,7 @@ actor FakeOpenAI: OpenAIClienting {
 
     func complete(apiKey: String, request: OpenAIRequest) async throws -> String {
         lastRequest = request
+        if !request.images.isEmpty { imageRequests.append(request) }
         if let error { throw error }
         // Key-terms extraction expects JSON; do not count as an answer request.
         if request.instructions.localizedCaseInsensitiveContains("Extract 3") {
@@ -212,6 +232,8 @@ actor FakeOpenAI: OpenAIClienting {
     func setCompleteDelayNanoseconds(_ value: UInt64) {
         completeDelayNanoseconds = value
     }
+
+    func setError(_ value: Error?) { error = value }
 
     func callCount() -> Int {
         // Answers always use the non-streaming complete path now.

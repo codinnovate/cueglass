@@ -9,6 +9,7 @@ protocol ScreenCapturing: Actor {
     func stop() async
     func updateInterval(_ interval: TimeInterval) async
     func captureFrame(displayID: UInt32?) async throws -> CGImage
+    func captureRegion(displayID: UInt32, rect: CGRect) async throws -> CGImage
 }
 
 actor ScreenCaptureService: ScreenCapturing {
@@ -78,6 +79,26 @@ actor ScreenCaptureService: ScreenCapturing {
         return image
     }
 
+    func captureRegion(displayID: UInt32, rect: CGRect) async throws -> CGImage {
+        let content = try await shareableContent(forceRefresh: true)
+        // Never fall back to a different display or change the continuous capture target.
+        guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
+            throw ScreenCaptureError.noDisplay
+        }
+        let excluded = content.applications.filter { $0.bundleIdentifier == Bundle.main.bundleIdentifier }
+        let filter = SCContentFilter(display: display, excludingApplications: excluded, exceptingWindows: [])
+        let scale = CGFloat(filter.pointPixelScale)
+        let source = try ScreenRegionGeometry.captureRect(rect, displaySize: filter.contentRect.size, scale: scale)
+        let config = SCStreamConfiguration()
+        config.sourceRect = source
+        config.width = max(1, Int((source.width * scale).rounded()))
+        config.height = max(1, Int((source.height * scale).rounded()))
+        config.showsCursor = false
+        config.capturesAudio = false
+        try Task.checkCancellation()
+        return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+    }
+
     private func shareableContent(forceRefresh: Bool) async throws -> SCShareableContent {
         if !forceRefresh,
            let cachedContent,
@@ -126,11 +147,17 @@ actor ScreenCaptureService: ScreenCapturing {
 
 enum ScreenCaptureError: LocalizedError {
     case noDisplay
+    case invalidRegion
+    case imageEncodingFailed
 
     var errorDescription: String? {
         switch self {
         case .noDisplay:
             return "No display available for screen capture."
+        case .invalidRegion:
+            return "Select an area at least 8 × 8 points on one display."
+        case .imageEncodingFailed:
+            return "Could not prepare the selected screenshot. Try a smaller area."
         }
     }
 }

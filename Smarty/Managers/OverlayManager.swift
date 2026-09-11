@@ -23,7 +23,8 @@ final class OverlayManager {
             frame: settings.overlayFrame?.cgRect,
             opacity: settings.overlayOpacity,
             locked: settings.positionLocked,
-            clickThrough: settings.clickThroughEnabled
+            clickThrough: settings.clickThroughEnabled,
+            blindMode: settings.blindModeEnabled
         )
         session.isClickThrough = settings.clickThroughEnabled
         session.isPositionLocked = settings.positionLocked
@@ -66,6 +67,7 @@ final class OverlayManager {
     private func makeOverlayView(session: InterviewSessionManager, settings: AppSettings) -> OverlayView {
         OverlayView(
             session: session,
+            settingsStore: settingsStore,
             fontSize: settings.overlayFontSize,
             opacity: settings.overlayOpacity,
             assistantMode: settings.assistantMode,
@@ -113,13 +115,11 @@ final class OverlayManager {
 
     func applyScreenShareExclusionToAllWindows() {
         let blind = settingsStore.settings.blindModeEnabled
-        // Floating / transient only on the overlay — applying it to the main WindowGroup
-        // removed close/minimize traffic lights and made two “modals” feel broken.
+        // Settings and permission sheets retain their native window behavior.
         panelController.applyOverlayBlindMode(blind)
         for window in NSApp.windows {
             if panelController.owns(window) { continue }
             window.sharingType = blind ? .none : .readWrite
-            panelController.restoreStandardWindowChrome(window)
         }
     }
 }

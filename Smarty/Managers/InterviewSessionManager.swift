@@ -12,6 +12,8 @@ final class InterviewSessionManager {
     private(set) var history: [ConversationMessage] = []
     private(set) var liveTranscript: String = ""
     private(set) var lastErrorMessage: String?
+    private(set) var regionCaptureMessage: String?
+    private var regionCaptureID: UUID?
 
     var isClickThrough: Bool = false
     var isPositionLocked: Bool = false
@@ -179,6 +181,7 @@ final class InterviewSessionManager {
     }
 
     func stopSession() async {
+        cancelRegionCapture()
         isRunning = false
         speechOnlyMode = false
         stopSpeechAfterAnswer = false
@@ -247,6 +250,7 @@ final class InterviewSessionManager {
 
     func pause() {
         guard isRunning else { return }
+        cancelRegionCapture()
         status = .paused
     }
 
@@ -371,6 +375,7 @@ final class InterviewSessionManager {
     }
 
     func askNow() async {
+        guard regionCaptureID == nil else { return }
         guard isRunning, status != .paused else { return }
         let images = takePendingImages()
         await ingestAttachedImageOCR(images)
@@ -384,6 +389,7 @@ final class InterviewSessionManager {
 
     /// Typed question from the overlay/main ask field.
     func askTyped(_ text: String) async {
+        guard regionCaptureID == nil else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let images = takePendingImages()
         guard !trimmed.isEmpty || !images.isEmpty else { return }
@@ -545,6 +551,84 @@ final class InterviewSessionManager {
         await performScreenshotSolve(accuracy: .fast)
     }
 
+    /// Reserve the screenshot flow before creating selection windows. Preflight never opens system UI.
+    func beginRegionCapture() -> UUID? {
+        guard regionCaptureID == nil else { return nil }
+        guard !isGeneratingAnswer, status != .thinking, status != .streaming, !isWhisperTranscribing else {
+            reportRegionCaptureIssue("Wait for the current answer before selecting another question.")
+            return nil
+        }
+        guard status != .paused else {
+            reportRegionCaptureIssue("Resume the session before capturing a question.")
+            return nil
+        }
+        guard settingsStore.hasAPIKey else {
+            reportRegionCaptureIssue("Add your OpenAI API key in Settings → API, then press ⌃⌥S again.")
+            return nil
+        }
+        guard permissions.screenCapturePreflight() else {
+            reportRegionCaptureIssue("Open Settings → General → Permissions to enable Screen Recording, then quit and reopen Smarty before trying ⌃⌥S again.")
+            return nil
+        }
+        let id = UUID()
+        regionCaptureID = id
+        regionCaptureMessage = "Drag over a question. Release to answer · Esc to cancel"
+        lastErrorMessage = nil
+        return id
+    }
+
+    func cancelRegionCapture() {
+        regionCaptureID = nil
+        regionCaptureMessage = nil
+    }
+
+    /// Notices must not reset an active answer or turn a paused session into an error state.
+    func reportRegionCaptureIssue(_ message: String) {
+        lastErrorMessage = message
+    }
+
+    func solveSelectedRegion(_ region: ScreenRegion, captureID: UUID) async {
+        guard regionCaptureID == captureID else { return }
+        defer {
+            if regionCaptureID == captureID { cancelRegionCapture() }
+        }
+        regionCaptureMessage = "Capturing selected question…"
+        do {
+            let image = try await screenCapture.captureRegion(displayID: region.displayID, rect: region.rect)
+            try Task.checkCancellation()
+            guard regionCaptureID == captureID else { return }
+            guard let attachment = ImageAttachment.make(
+                from: NSImage(cgImage: image, size: .zero), preferredMIME: .png
+            ) else { throw ScreenCaptureError.imageEncodingFailed }
+            regionCaptureMessage = "Reading selected question…"
+            // OCR is supplemental: diagrams and OCR failures still use the image directly.
+            await ocr.reset()
+            let text = (try? await ocr.recognizeText(in: image, accuracy: .accurate))?.trimmed ?? ""
+            try Task.checkCancellation()
+            guard regionCaptureID == captureID, status != .paused else { return }
+            cancelRegionCapture()
+            lastErrorMessage = nil
+            allowAIWithoutFullSession = true
+            let instruction = """
+            Answer the question in the selected screenshot. Use the image as the source of truth,
+            including diagrams, formulas, code, and answer choices. If there are multiple questions,
+            answer each in order. If the question is incomplete or unreadable, explain what is missing
+            instead of inventing details. Ignore unrelated earlier screen or speech context.
+            \(text.isEmpty ? "" : "Supplemental OCR from this selection:\n" + text)
+            """
+            await requestAI(
+                force: true, skipSummarization: true,
+                displayQuestion: text.isEmpty ? "Selected screenshot question" : text,
+                userOverride: instruction, images: [attachment]
+            )
+        } catch is CancellationError {
+            // Cancellation is silent and never submits an image.
+        } catch {
+            guard regionCaptureID == captureID else { return }
+            reportRegionCaptureIssue(error.localizedDescription)
+        }
+    }
+
     /// Whisper: tap mic to start / pause / resume recording (no pause VAD).
     func toggleWhisperRecording() async {
         guard settingsStore.settings.assistantMode == .whisper else { return }
@@ -689,6 +773,7 @@ final class InterviewSessionManager {
     }
 
     private func performScreenshotSolve(accuracy: OCRAccuracy) async {
+        guard regionCaptureID == nil else { return }
         guard settingsStore.hasAPIKey else {
             presentError("Add your OpenAI API key in Settings.")
             return
@@ -950,6 +1035,7 @@ final class InterviewSessionManager {
         images: [ImageAttachment] = []
     ) async {
         let canRun = isRunning || allowAIWithoutFullSession
+        guard regionCaptureID == nil else { return }
         guard canRun, status != .paused else { return }
         guard settingsStore.hasAPIKey else {
             presentError("Add your OpenAI API key in Settings.")
@@ -1020,12 +1106,14 @@ final class InterviewSessionManager {
         await contextStore.appendUser(questionSeed.isBlank ? leanQuestion : questionSeed)
         guard activeGenerationID == generationID, isGeneratingAnswer else { return }
 
+        let role = settings.roleProfile
         let sessionGuidance = PromptBuilder.sessionGuidance(
             language: settings.preferredProgrammingLanguage,
             focus: settings.interviewFocus,
-            length: settings.answerLength
+            length: settings.answerLength,
+            role: role
         )
-        let technicalInstructions = Self.technicalSpokenInstructions + "\n\n" + sessionGuidance
+        let technicalInstructions = Self.technicalSpokenInstructions(for: role) + "\n\n" + sessionGuidance
 
         let fastModel = settings.model.hasPrefix("gpt-4o") ? settings.model : "gpt-4o-mini"
         let technicalRequest = OpenAIRequest(
@@ -1110,15 +1198,21 @@ final class InterviewSessionManager {
         }
     }
 
-    private static let technicalSpokenInstructions = """
-    You are a discreet interview assistant. Reply with ONE spoken technical answer the candidate can read aloud.
-    First person. Natural interview cadence. Precise technical terms. Markdown/code only when needed.
-    Keep it tight — about 30–60 seconds of speech. No second “simple” version. No preamble.
-    For coding/DSA: prefer the optimal approach first with brief complexity; one short code block if useful.
-    Do not invent employers, metrics, or tools not implied by the question.
+    /// Live-path instructions for the fast answer. Coding rules only apply to technical roles.
+    private static func technicalSpokenInstructions(for role: RoleProfile) -> String {
+        var lines = """
+        You are a discreet interview assistant. Reply with ONE spoken answer the candidate can read aloud.
+        First person. Natural interview cadence. Precise domain terms. Markdown/code only when needed.
+        Keep it tight — about 30–60 seconds of speech. No second “simple” version. No preamble.
+        Do not invent employers, metrics, or tools not implied by the question.
+        """
 
-    \(InlineTechnicalExplanationFormat.rules)
-    """
+        if role.expectsCoding {
+            lines += "\nFor coding/DSA: prefer the optimal approach first with brief complexity; one short code block if useful."
+        }
+
+        return lines + "\n\n" + InlineTechnicalExplanationFormat.rules
+    }
 
     private static let friendlyExplainInstructions = """
     Rewrite the idea into a short human-friendly explanation for the candidate (not for reading aloud to the interviewer).
@@ -1227,7 +1321,7 @@ final class InterviewSessionManager {
             request: OpenAIRequest(
                 model: settingsStore.settings.model,
                 instructions: """
-                Extract 3–6 important technical terms from the interview answer.
+                Extract 3–6 important terms from the interview answer that matter for a \(settingsStore.settings.roleProfile.field.displayName) role.
                 Return ONLY a JSON array (no markdown) of objects:
                 [{"term":"...","definition":"simple technical definition in 1–2 sentences","relatedQuestions":["possible follow-up Q1","Q2"]}]
                 Definitions must be accurate but easy. Prefer terms a candidate might be asked about next.

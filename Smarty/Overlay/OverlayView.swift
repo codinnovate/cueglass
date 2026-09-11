@@ -2,12 +2,14 @@ import SwiftUI
 
 struct OverlayView: View {
     @Bindable var session: InterviewSessionManager
+    /// Optional so previews can omit it; when present the header shows the role button.
+    var settingsStore: SettingsStore? = nil
     let fontSize: Double
     let opacity: Double
     var assistantMode: AssistantMode = .whisper
     var blindModeEnabled: Bool = true
     var statusBlinkEnabled: Bool = true
-    /// Floating overlay shows ✕; main window uses traffic lights instead.
+    /// Allows previews to omit the overlay's hide button.
     var showsCloseButton: Bool = true
     var onRequestTypingFocus: (() -> Void)? = nil
     var onAppearanceChange: (() -> Void)? = nil
@@ -19,6 +21,7 @@ struct OverlayView: View {
     @State private var draftQuestion = ""
     @State private var micPulse = false
     @State private var showImageImporter = false
+    @State private var showRoleEditor = false
     @FocusState private var askFieldFocused: Bool
 
     private var isWhisper: Bool { assistantMode == .whisper }
@@ -51,6 +54,7 @@ struct OverlayView: View {
         VStack(alignment: .leading, spacing: 10) {
             modeSwitcher
             header
+            captureNotice
             Divider().opacity(0.35)
             answerSection
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -78,6 +82,7 @@ struct OverlayView: View {
         VStack(alignment: .leading, spacing: 10) {
             modeSwitcher
             header
+            captureNotice
             Divider().opacity(0.35)
             answerSection
             if !session.keyTerms.isEmpty {
@@ -96,6 +101,17 @@ struct OverlayView: View {
             allowsMultipleSelection: true
         ) { result in
             handleImageImport(result)
+        }
+    }
+
+    @ViewBuilder
+    private var captureNotice: some View {
+        if let message = session.regionCaptureMessage ?? session.lastErrorMessage {
+            Text(message)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel(message)
         }
     }
 
@@ -143,7 +159,7 @@ struct OverlayView: View {
             if blindModeEnabled {
                 Image(systemName: "eye.slash.fill")
                     .foregroundStyle(.green)
-                    .help("Blind on — hidden from most screen shares")
+                    .help("Blind on — best-effort screen-share exclusion; visibility depends on the recording app")
             }
             if session.isMicMuted {
                 Image(systemName: "mic.slash.fill")
@@ -153,6 +169,34 @@ struct OverlayView: View {
             if session.isClickThrough {
                 Image(systemName: "hand.raised.slash")
                     .help("Click-through enabled")
+            }
+
+            if let settingsStore {
+                let role = settingsStore.settings.roleProfile
+                Button {
+                    // Non-activating panel: the popover needs key focus before it can be typed in.
+                    onRequestTypingFocus?()
+                    showRoleEditor.toggle()
+                } label: {
+                    Image(systemName: "person.text.rectangle")
+                        .font(.system(size: fontSize))
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(role.title.isBlank ? Color.orange : Color.primary)
+                .help(
+                    role.title.isBlank
+                        ? "No role set — answers default to \(role.field.displayName)"
+                        : "Role: \(role.displaySummary)"
+                )
+                .popover(isPresented: $showRoleEditor, arrowEdge: .bottom) {
+                    Form {
+                        Section("Role You're Interviewing For") {
+                            RoleFields(store: settingsStore)
+                        }
+                    }
+                    .formStyle(.grouped)
+                    .frame(width: 420, height: 470)
+                }
             }
 
             if !isWhisper {
@@ -174,7 +218,7 @@ struct OverlayView: View {
             }
             .buttonStyle(.borderless)
             .foregroundStyle(blindModeEnabled ? Color.green : Color.primary)
-            .help(blindModeEnabled ? "Blind on — click to show in screen share" : "Blind off — click to hide from screen share")
+            .help(blindModeEnabled ? "Blind on — best-effort exclusion; click to disable" : "Blind off — click to request screen-share exclusion")
 
             Button {
                 session.setPositionLocked(!session.isPositionLocked)
@@ -289,7 +333,7 @@ struct OverlayView: View {
         AskQuestionField(
             text: $draftQuestion,
             fontSize: fontSize,
-            isBusy: false,
+            isBusy: session.regionCaptureMessage != nil,
             canSubmitHeard: session.canSubmitHeard,
             pendingImages: session.pendingImages,
             isFocused: $askFieldFocused,

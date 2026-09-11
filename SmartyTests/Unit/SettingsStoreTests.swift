@@ -32,6 +32,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(settings.preferredProgrammingLanguage, .python)
         XCTAssertEqual(settings.interviewFocus, .mixed)
         XCTAssertEqual(settings.answerLength, .standard)
+        XCTAssertEqual(settings.roleProfile, .default)
     }
 
     func testRoundTripsPresetFields() throws {
@@ -44,6 +45,36 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(decoded.preferredProgrammingLanguage, .rust)
         XCTAssertEqual(decoded.interviewFocus, .systemDesign)
         XCTAssertEqual(decoded.answerLength, .deep)
+    }
+
+    func testDecodesRoleProfileSavedBeforeCodingPreference() throws {
+        // A profile written by the previous build has no codingPreference key.
+        // It must still load — throwing here would reset every other setting too.
+        let json = """
+        {"model":"gpt-4o","roleProfile":{"title":"Data Annotator","field":"product","company":"","notes":"n"}}
+        """.data(using: .utf8)!
+        let settings = try JSONDecoder().decode(AppSettings.self, from: json)
+        XCTAssertEqual(settings.roleProfile.title, "Data Annotator")
+        XCTAssertEqual(settings.roleProfile.field, .product)
+        XCTAssertEqual(settings.roleProfile.codingPreference, .auto)
+        XCTAssertEqual(settings.model, "gpt-4o")
+    }
+
+    func testRoundTripsRoleProfile() throws {
+        var settings = AppSettings.default
+        settings.roleProfile = RoleProfile(
+            title: "Growth Marketing Manager",
+            field: .marketing,
+            company: "Acme",
+            notes: "Lifecycle + paid social."
+        )
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+        XCTAssertEqual(decoded.roleProfile.title, "Growth Marketing Manager")
+        XCTAssertEqual(decoded.roleProfile.field, .marketing)
+        XCTAssertEqual(decoded.roleProfile.company, "Acme")
+        XCTAssertFalse(decoded.roleProfile.expectsCoding)
+        XCTAssertEqual(decoded.roleProfile.displaySummary, "Growth Marketing Manager at Acme")
     }
 }
 

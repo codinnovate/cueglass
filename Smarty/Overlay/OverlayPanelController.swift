@@ -5,6 +5,7 @@ import SwiftUI
 /// while staying non-activating for normal overlay use.
 @MainActor
 final class OverlayPanelController: NSObject, NSWindowDelegate {
+    static let windowIdentifier = NSUserInterfaceItemIdentifier("smarty.overlay")
     private var panel: KeyablePanel?
     private var hostingView: NSHostingView<AnyView>?
     private let onFrameChange: (CGRect) -> Void
@@ -21,13 +22,16 @@ final class OverlayPanelController: NSObject, NSWindowDelegate {
         frame: CGRect?,
         opacity: Double,
         locked: Bool,
-        clickThrough: Bool
+        clickThrough: Bool,
+        blindMode: Bool
     ) {
         let content = AnyView(rootView)
         if panel == nil {
             createPanel(initialFrame: frame)
         }
         guard let panel else { return }
+
+        applyOverlayBlindMode(blindMode)
 
         if let hostingView {
             hostingView.rootView = content
@@ -40,6 +44,9 @@ final class OverlayPanelController: NSObject, NSWindowDelegate {
         }
 
         applyAppearance(opacity: opacity, locked: locked, clickThrough: clickThrough)
+        // Reopening after a monitor disconnect must also recover an already-created panel.
+        let visibleFrame = Self.frameOnVisibleScreen(panel.frame)
+        if visibleFrame != panel.frame { panel.setFrame(visibleFrame, display: false) }
         panel.orderFrontRegardless()
         isVisible = true
     }
@@ -89,7 +96,7 @@ final class OverlayPanelController: NSObject, NSWindowDelegate {
         window === panel
     }
 
-    /// Overlay-only floating + blind. Never apply this to the main titled window.
+    /// Overlay-only floating behavior and best-effort sharing exclusion.
     func applyOverlayBlindMode(_ blind: Bool) {
         guard let panel else { return }
         panel.sharingType = blind ? .none : .readWrite
@@ -97,18 +104,6 @@ final class OverlayPanelController: NSObject, NSWindowDelegate {
         panel.level = .floating
         panel.backgroundColor = .clear
         panel.isOpaque = false
-    }
-
-    /// Restore standard macOS chrome on the main app window (traffic lights, normal level).
-    func restoreStandardWindowChrome(_ window: NSWindow) {
-        guard !owns(window) else { return }
-        window.level = .normal
-        window.collectionBehavior = [.moveToActiveSpace, .fullScreenPrimary, .managed]
-        window.titlebarAppearsTransparent = false
-        window.titleVisibility = .visible
-        window.styleMask.formUnion([.titled, .closable, .miniaturizable, .resizable])
-        window.isOpaque = false
-        window.backgroundColor = .clear
     }
 
     private func createPanel(initialFrame: CGRect?) {
@@ -123,6 +118,7 @@ final class OverlayPanelController: NSObject, NSWindowDelegate {
         )
 
         panel.isFloatingPanel = true
+        panel.identifier = Self.windowIdentifier
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = true
         panel.isReleasedWhenClosed = false
@@ -135,8 +131,6 @@ final class OverlayPanelController: NSObject, NSWindowDelegate {
         panel.isMovable = true
         panel.isMovableByWindowBackground = true
         panel.acceptsMouseMovedEvents = true
-
-        applyOverlayBlindMode(true)
 
         self.panel = panel
     }

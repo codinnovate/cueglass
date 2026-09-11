@@ -9,6 +9,9 @@ enum InlineTechnicalExplanationFormat {
 
     Whenever you introduce a technical term, concept, acronym, or advanced terminology that may not be immediately understandable, explain it immediately using a separate bracketed explanation.
 
+    The examples below are drawn from software, but this rule applies to jargon in ANY field —
+    product, finance, healthcare, marketing, legal, operations, and so on. Explain that field's jargon the same way.
+
     ### REQUIRED FORMAT
 
     Always use:
@@ -123,9 +126,9 @@ enum InlineTechnicalExplanationFormat {
 
     **array** **[a list of values]**
 
-    The target audience is already a software engineer.
+    The listener already knows the everyday basics of their own field — do not explain those.
 
-    Instead, explain concepts that could reasonably require knowledge of the specific technology or computer science topic.
+    Instead, explain concepts that could reasonably require specialist knowledge of the topic or field being discussed.
 
     Examples:
 
