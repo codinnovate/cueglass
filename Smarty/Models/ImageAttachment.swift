@@ -42,6 +42,11 @@ struct ImageAttachment: Identifiable, Equatable, Sendable {
         "data:\(mimeType.rawValue);base64,\(data.base64EncodedString())"
     }
 
+    /// (media type, base64 payload) for Anthropic/Gemini-style inline image blocks.
+    var anthropicSourceComponents: (mediaType: String, base64: String) {
+        (mimeType.rawValue, data.base64EncodedString())
+    }
+
     /// Downscaled preview suitable for thumbnail strips.
     @MainActor
     func thumbnail(maxPixel: CGFloat = 72) -> NSImage? {
