@@ -22,24 +22,30 @@ protocol SpeechRecognizing: AnyObject, Sendable {
         microphoneUID: String?,
         pauseSeconds: TimeInterval,
         apiKey: String,
+        provider: AIProvider,
         handler: @escaping @Sendable (SpeechEvent) -> Void
     ) async throws
     func stop() async
     func setMuted(_ muted: Bool) async
 
     /// Mic tap only — no VAD / pause detection (Whisper mode).
-    func startManualCapture(microphoneUID: String?, apiKey: String) async throws
+    func startManualCapture(microphoneUID: String?, apiKey: String, provider: AIProvider) async throws
     func pauseManualCapture() async
     func resumeManualCapture() async
     func cancelManualCapture() async
     func finishManualCaptureAndTranscribe() async throws -> String
 }
 
-/// Mic capture + local VAD, transcription via OpenAI STT (gpt-4o-mini-transcribe / whisper-1).
+/// Mic capture + local VAD, transcription via OpenAI STT (gpt-4o-mini-transcribe / whisper-1)
+/// or Gemini's native audio input, selected per-session via `start`/`startManualCapture`.
 final class SpeechRecognitionService: SpeechRecognizing, @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.smarty.speech", qos: .userInitiated)
     private let audioEngine = AVAudioEngine()
-    private let transcriber: any OpenAIClienting
+    private let openAITranscriber: any SpeechTranscribing
+    private let geminiTranscriber: any SpeechTranscribing
+    /// Selected per-session by `start`/`startManualCapture`'s `provider` argument.
+    private var activeTranscriber: any SpeechTranscribing
+    private var activeProviderName = "OpenAI"
     private var endpointing = SpeechEndpointing()
     private var silenceTimer: DispatchSourceTimer?
     private var handler: (@Sendable (SpeechEvent) -> Void)?
@@ -57,8 +63,14 @@ final class SpeechRecognitionService: SpeechRecognizing, @unchecked Sendable {
     private let capturePausedFlag = MuteFlag()
     private var committedText = ""
 
-    init(transcriber: any OpenAIClienting = OpenAIClient()) {
-        self.transcriber = transcriber
+    init(openAI: any SpeechTranscribing = OpenAIClient(), gemini: any SpeechTranscribing = GeminiClient()) {
+        self.openAITranscriber = openAI
+        self.geminiTranscriber = gemini
+        self.activeTranscriber = openAI
+    }
+
+    private func transcriber(for provider: AIProvider) -> any SpeechTranscribing {
+        provider == .gemini ? geminiTranscriber : openAITranscriber
     }
 
     var isEngineRunning: Bool {
@@ -95,14 +107,18 @@ final class SpeechRecognitionService: SpeechRecognizing, @unchecked Sendable {
         microphoneUID: String?,
         pauseSeconds: TimeInterval,
         apiKey: String,
+        provider: AIProvider,
         handler: @escaping @Sendable (SpeechEvent) -> Void
     ) async throws {
         guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw SpeechError.missingAPIKey
         }
+        let selectedTranscriber = transcriber(for: provider)
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async {
                 do {
+                    self.activeTranscriber = selectedTranscriber
+                    self.activeProviderName = provider.displayName
                     self.stopSync()
                     try self.startSync(
                         microphoneUID: microphoneUID,
@@ -137,7 +153,7 @@ final class SpeechRecognitionService: SpeechRecognizing, @unchecked Sendable {
                     self.handler?(.init(kind: .partial("Mic muted")))
                 } else if self.shouldKeepListening {
                     self.handler?(.init(kind: .partial(
-                        self.committedText.isEmpty ? "Listening… (OpenAI STT)" : self.committedText
+                        self.committedText.isEmpty ? "Listening… (\(self.activeProviderName) STT)" : self.committedText
                     )))
                 }
                 continuation.resume()
@@ -145,13 +161,16 @@ final class SpeechRecognitionService: SpeechRecognizing, @unchecked Sendable {
         }
     }
 
-    func startManualCapture(microphoneUID: String?, apiKey: String) async throws {
+    func startManualCapture(microphoneUID: String?, apiKey: String, provider: AIProvider) async throws {
         guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw SpeechError.missingAPIKey
         }
+        let selectedTranscriber = transcriber(for: provider)
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async {
                 do {
+                    self.activeTranscriber = selectedTranscriber
+                    self.activeProviderName = provider.displayName
                     self.stopSync()
                     try self.startManualSync(microphoneUID: microphoneUID, apiKey: apiKey)
                     continuation.resume()
@@ -209,7 +228,7 @@ final class SpeechRecognitionService: SpeechRecognizing, @unchecked Sendable {
                 let wav = WavEncoder.makeWav(samples: samples, sampleRate: self.sampleRate)
                 let apiKey = self.apiKey
                 let prompt = Self.sttPrompt
-                let transcriber = self.transcriber
+                let transcriber = self.activeTranscriber
                 // Tear down mic while STT runs.
                 self.stopSync()
 
@@ -257,8 +276,8 @@ final class SpeechRecognitionService: SpeechRecognizing, @unchecked Sendable {
 
         try installTapAndStartEngine(microphoneUID: microphoneUID)
         startSilenceTimer()
-        handler(.init(kind: .partial("Listening… (OpenAI STT)")))
-        AppLog.speech.info("OpenAI STT listening started @ \(self.sampleRate)Hz")
+        handler(.init(kind: .partial("Listening… (\(self.activeProviderName) STT)")))
+        AppLog.speech.info("\(self.activeProviderName) STT listening started @ \(self.sampleRate)Hz")
     }
 
     private func startManualSync(microphoneUID: String?, apiKey: String) throws {
@@ -409,7 +428,7 @@ final class SpeechRecognitionService: SpeechRecognizing, @unchecked Sendable {
         let wav = WavEncoder.makeWav(samples: samples, sampleRate: sampleRate)
         let apiKey = self.apiKey
         let prompt = Self.sttPrompt
-        let transcriber = self.transcriber
+        let transcriber = self.activeTranscriber
 
         Task { [weak self] in
             do {

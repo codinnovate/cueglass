@@ -59,7 +59,7 @@ struct APISettingsSection: View {
                 }
                 .pickerStyle(.segmented)
 
-                Text("Voice input (Whisper/Stream) always transcribes through OpenAI, regardless of the answer provider selected here.")
+                Text("Voice input (Whisper/Stream) transcribes through Gemini when it's selected above and has a saved key; otherwise it falls back to OpenAI Whisper.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
