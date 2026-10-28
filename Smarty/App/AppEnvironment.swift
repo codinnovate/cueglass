@@ -17,6 +17,8 @@ final class AppEnvironment {
     /// STT (Whisper) always goes through OpenAI directly, regardless of the selected answer provider.
     let openAI: OpenAIClient
     let aiClient: AIClientRouter
+    /// Always-on-top diagnostics HUD (⌃⌥D or the menu bar item).
+    @ObservationIgnored let diagnostics: DiagnosticsPanelController
     @ObservationIgnored private let regionSelection = RegionSelectionController()
     @ObservationIgnored private var regionCaptureTask: Task<Void, Never>?
 
@@ -35,7 +37,6 @@ final class AppEnvironment {
         let aiClient = AIClientRouter(openAI: openAI, gemini: gemini)
         let speech = SpeechRecognitionService(openAI: openAI, gemini: gemini)
         let ocr = OCRService()
-        let contextStore = ContextStore()
 
         let session = InterviewSessionManager(
             settingsStore: settingsStore,
@@ -43,14 +44,22 @@ final class AppEnvironment {
             screenCapture: screenCapture,
             ocr: ocr,
             speech: speech,
-            aiClient: aiClient,
-            contextStore: contextStore
+            aiClient: aiClient
         )
 
         self.settingsStore = settingsStore
         self.permissions = permissions
         self.session = session
-        self.overlayManager = OverlayManager(settingsStore: settingsStore)
+        let overlayManager = OverlayManager(settingsStore: settingsStore)
+        self.overlayManager = overlayManager
+        self.diagnostics = DiagnosticsPanelController(
+            session: session,
+            settingsStore: settingsStore,
+            monitor: DiagnosticsMonitor(
+                permissionService: permissions,
+                overlayVisible: { [weak overlayManager] in overlayManager?.isVisible ?? false }
+            )
+        )
         self.hotkeys = HotkeyService()
         self.launchAtLogin = LaunchAtLoginService()
         self.screenCapture = screenCapture
@@ -73,6 +82,7 @@ final class AppEnvironment {
         overlayManager.present(session: session)
 
         applyMenuBarIconSetting()
+        diagnostics.restoreIfNeeded()
 
         let captureShortcutRegistered = hotkeys.registerDefaults(
             onToggleOverlay: { [weak self] in
@@ -84,12 +94,26 @@ final class AppEnvironment {
                 self.session.togglePause()
                 if self.session.status == .paused { self.cancelRegionSelection() }
             },
+            onSolveScreen: { [weak self] in
+                guard let self else { return }
+                self.overlayManager.present(session: self.session)
+                Task { await self.session.screenshotSolve() }
+            },
             onCaptureRegion: { [weak self] in
                 self?.captureSelectedRegion()
+            },
+            onCopyRegionText: { [weak self] in
+                self?.copyRegionText()
+            },
+            onCopyRegionImage: { [weak self] in
+                self?.copyRegionImage()
+            },
+            onToggleDiagnostics: { [weak self] in
+                self?.diagnostics.toggle()
             }
         )
         if !captureShortcutRegistered {
-            session.reportRegionCaptureIssue("Could not register ⌃⌥S. Another app may be using it. Use Capture Region in the menu bar, or free the shortcut and restart Smarty.")
+            session.reportRegionCaptureIssue("Could not register ⌃⌥S/⌃⌥A/⌃⌥C/⌃⌥R. Another app may be using one of them. Use the menu bar items instead, or free the shortcut and restart Smarty.")
         }
 
         let enabled = launchAtLogin.isEnabled()
@@ -111,6 +135,7 @@ final class AppEnvironment {
         cancelRegionSelection()
         hotkeys.unregisterAll()
         statusItemController.remove()
+        diagnostics.tearDown()
         await session.stopSession()
         overlayManager.hide()
     }
@@ -124,12 +149,43 @@ final class AppEnvironment {
     }
 
     func captureSelectedRegion() {
+        selectRegion(for: .answer)
+    }
+
+    /// Region-select → OpenAI vision transcription → clipboard + answer.
+    func copyRegionText() {
+        selectRegion(for: .copyText)
+    }
+
+    /// Region-select → clipboard image + OpenAI vision answer.
+    func copyRegionImage() {
+        selectRegion(for: .copyImageAndAnswer)
+    }
+
+    private enum RegionAction {
+        case answer
+        case copyText
+        case copyImageAndAnswer
+
+        var showsAnswer: Bool {
+            switch self {
+            case .answer, .copyText, .copyImageAndAnswer: return true
+            }
+        }
+    }
+
+    private func selectRegion(for action: RegionAction) {
         guard !regionSelection.isSelecting, regionCaptureTask == nil else { return }
-        guard let captureID = session.beginRegionCapture() else {
-            overlayManager.present(session: session)
+        let captureID: UUID?
+        switch action {
+        case .answer: captureID = session.beginRegionCapture()
+        case .copyText: captureID = session.beginCopyRegionCapture()
+        case .copyImageAndAnswer: captureID = session.beginCopyRegionImageCapture()
+        }
+        guard let captureID else {
+            if action.showsAnswer { overlayManager.present(session: session) }
             return
         }
-        // Keep the answer overlay out of the user's way until selection finishes.
         let overlayWasVisible = overlayManager.isVisible
         overlayManager.hide()
         regionSelection.begin(blindMode: settingsStore.settings.blindModeEnabled) { [weak self] region in
@@ -139,11 +195,20 @@ final class AppEnvironment {
                 if overlayWasVisible { self.overlayManager.present(session: self.session) }
                 return
             }
-            self.overlayManager.present(session: self.session)
+            if action.showsAnswer || overlayWasVisible {
+                self.overlayManager.present(session: self.session)
+            }
             self.regionCaptureTask = Task { @MainActor [weak self] in
                 guard let self else { return }
                 defer { self.regionCaptureTask = nil }
-                await self.session.solveSelectedRegion(region, captureID: captureID)
+                switch action {
+                case .answer:
+                    await self.session.solveSelectedRegion(region, captureID: captureID)
+                case .copyText:
+                    await self.session.copyRegionTextToClipboard(region, captureID: captureID)
+                case .copyImageAndAnswer:
+                    await self.session.copyRegionImageToClipboard(region, captureID: captureID)
+                }
             }
         }
     }

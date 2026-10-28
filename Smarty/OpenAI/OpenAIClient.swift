@@ -45,6 +45,9 @@ struct AIRequest: Sendable {
     let temperature: Double
     let stream: Bool
     let images: [ImageAttachment]
+    /// Prior turns of this session, oldest first. `input` is the *new* question and is never in here —
+    /// each client appends it as the final user turn.
+    let history: [ConversationMessage]
 
     init(
         provider: AIProvider,
@@ -53,7 +56,8 @@ struct AIRequest: Sendable {
         input: String,
         temperature: Double,
         stream: Bool,
-        images: [ImageAttachment] = []
+        images: [ImageAttachment] = [],
+        history: [ConversationMessage] = []
     ) {
         self.provider = provider
         self.model = model
@@ -62,10 +66,34 @@ struct AIRequest: Sendable {
         self.temperature = temperature
         self.stream = stream
         self.images = images
+        self.history = history
     }
 }
 
 typealias OpenAIRequest = AIRequest
+
+/// Stored turns are appended opportunistically (speech mis-fires, cancelled generations), so they can
+/// contain blanks, repeats, and dangling questions. Chat APIs — Anthropic especially — reject anything
+/// but strictly alternating user/assistant turns starting with the user, so normalize before sending.
+enum ConversationHistorySanitizer {
+    static func sanitize(_ messages: [ConversationMessage]) -> [ConversationMessage] {
+        var cleaned: [ConversationMessage] = []
+        for message in messages where message.role != .system {
+            let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { continue }
+            if cleaned.isEmpty, message.role == .assistant { continue }
+            if let last = cleaned.last, last.role == message.role {
+                cleaned[cleaned.count - 1].content = last.content + "\n\n" + text
+            } else {
+                cleaned.append(ConversationMessage(role: message.role, content: text, createdAt: message.createdAt))
+            }
+        }
+        // A trailing user turn is a question that never got answered; keeping it would collide with the
+        // live question the client appends next.
+        if cleaned.last?.role == .user { cleaned.removeLast() }
+        return cleaned
+    }
+}
 
 /// Builds Responses API JSON bodies (text-only or multimodal). Exposed for unit tests.
 enum OpenAIPayloadBuilder {
@@ -77,24 +105,29 @@ enum OpenAIPayloadBuilder {
             "store": false
         ]
 
-        if request.images.isEmpty {
+        let history = ConversationHistorySanitizer.sanitize(request.history)
+
+        if request.images.isEmpty, history.isEmpty {
             payload["input"] = request.input
         } else {
-            var content: [[String: Any]] = [
-                ["type": "input_text", "text": request.input]
-            ]
-            for image in request.images {
-                content.append([
-                    "type": "input_image",
-                    "image_url": image.dataURL
-                ])
+            var items: [[String: Any]] = history.map { message in
+                ["role": message.role.rawValue, "content": message.content]
             }
-            payload["input"] = [
-                [
-                    "role": "user",
-                    "content": content
+            if request.images.isEmpty {
+                items.append(["role": "user", "content": request.input])
+            } else {
+                var content: [[String: Any]] = [
+                    ["type": "input_text", "text": request.input]
                 ]
-            ]
+                for image in request.images {
+                    content.append([
+                        "type": "input_image",
+                        "image_url": image.dataURL
+                    ])
+                }
+                items.append(["role": "user", "content": content])
+            }
+            payload["input"] = items
         }
 
         if request.provider.supportsTemperature(request.model) {

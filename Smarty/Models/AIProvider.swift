@@ -33,7 +33,7 @@ enum AIProvider: String, Codable, CaseIterable, Sendable, Identifiable {
     var defaultModels: [String] {
         switch self {
         case .openAI:
-            return ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1"]
+            return [AppSettings.defaultOpenAIAnswerModel, "gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1"]
         case .anthropic:
             return ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5-20251001"]
         case .gemini:
@@ -43,10 +43,14 @@ enum AIProvider: String, Codable, CaseIterable, Sendable, Identifiable {
         }
     }
 
-    /// True unless the model is one of OpenAI's reasoning models (o1/o3/o4), which reject `temperature`.
+    /// OpenAI reasoning-model requests use their model defaults instead of `temperature`.
     func supportsTemperature(_ model: String) -> Bool {
         guard self == .openAI else { return true }
-        return !model.hasPrefix("o1") && !model.hasPrefix("o3") && !model.hasPrefix("o4")
+        return !model.hasPrefix("o1")
+            && !model.hasPrefix("o3")
+            && !model.hasPrefix("o4")
+            && !model.hasPrefix("gpt-5")
+            && !model.hasPrefix("gpt-6")
     }
 
     /// DeepSeek's chat API has no image input today; the other three accept multimodal content.

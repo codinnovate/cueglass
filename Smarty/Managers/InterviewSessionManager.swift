@@ -75,6 +75,13 @@ final class InterviewSessionManager {
     private var activeGenerationID = UUID()
     /// Question text for the in-flight generation (shown as Question N).
     private var inFlightDisplayQuestion: String = ""
+    /// The exact question currently sent for answer generation. The overlay uses this
+    /// immediately, before the response arrives, so the candidate can verify it.
+    var questionBeingAnswered: String? {
+        guard isGeneratingAnswer else { return nil }
+        let question = inFlightDisplayQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+        return question.isEmpty ? nil : question
+    }
     /// When true, finishAnswer replaces the latest turn instead of appending.
     private var replaceLatestTurnOnFinish = false
     /// Pause heard while answering — answered after the current turn completes.
@@ -87,7 +94,7 @@ final class InterviewSessionManager {
         ocr: any OCRProcessing = OCRService(),
         speech: any SpeechRecognizing = SpeechRecognitionService(),
         aiClient: any AIProviderClienting = AIClientRouter(openAI: OpenAIClient()),
-        contextStore: ContextStore = ContextStore()
+        contextStore: ContextStore? = nil
     ) {
         self.settingsStore = settingsStore
         self.permissions = permissions
@@ -95,9 +102,9 @@ final class InterviewSessionManager {
         self.ocr = ocr
         self.speech = speech
         self.aiClient = aiClient
-        self.contextStore = contextStore
-        self.summarizer = ContextSummarizer(aiClient: aiClient)
         self.history = settingsStore.recentHistory
+        self.contextStore = contextStore ?? ContextStore(conversation: settingsStore.recentHistory)
+        self.summarizer = ContextSummarizer(aiClient: aiClient)
     }
 
     static var preview: InterviewSessionManager {
@@ -556,14 +563,15 @@ final class InterviewSessionManager {
         lastErrorMessage = nil
     }
 
-    /// Capture the screen once, OCR the problem, and return a solution — without faking a speech session.
+    /// Capture the screen once and send the actual image to OpenAI vision — without
+    /// Apple Vision OCR or a fake speech session.
     func screenshotSolve() async {
-        await performScreenshotSolve(accuracy: .accurate)
+        await performScreenshotSolve()
     }
 
-    /// Whisper mode: fast OCR path for snappy screen answers.
+    /// Whisper uses the same direct OpenAI vision path as Stream mode.
     func whisperScreenshotSolve() async {
-        await performScreenshotSolve(accuracy: .fast)
+        await performScreenshotSolve()
     }
 
     /// Reserve the screenshot flow before creating selection windows. Preflight never opens system UI.
@@ -577,17 +585,69 @@ final class InterviewSessionManager {
             reportRegionCaptureIssue("Resume the session before capturing a question.")
             return nil
         }
-        guard settingsStore.hasAPIKey else {
-            reportRegionCaptureIssue("\(missingProviderKeyMessage) → API, then press ⌃⌥S again.")
+        guard settingsStore.hasAPIKey(for: .openAI) else {
+            reportRegionCaptureIssue("Add your OpenAI API key in Settings → API, then press ⌃⌥A again.")
             return nil
         }
         guard permissions.screenCapturePreflight() else {
-            reportRegionCaptureIssue("Open Settings → General → Permissions to enable Screen Recording, then quit and reopen Smarty before trying ⌃⌥S again.")
+            reportRegionCaptureIssue("Open Settings → General → Permissions to enable Screen Recording, then quit and reopen Smarty before trying ⌃⌥A again.")
             return nil
         }
         let id = UUID()
         regionCaptureID = id
         regionCaptureMessage = "Drag over a question. Release to answer · Esc to cancel"
+        lastErrorMessage = nil
+        return id
+    }
+
+    /// Reserve for OpenAI vision transcription to the clipboard.
+    func beginCopyRegionCapture() -> UUID? {
+        guard regionCaptureID == nil else { return nil }
+        guard !isGeneratingAnswer, status != .thinking, status != .streaming, !isWhisperTranscribing else {
+            reportRegionCaptureIssue("Wait for the current answer before selecting another question.")
+            return nil
+        }
+        guard status != .paused else {
+            reportRegionCaptureIssue("Resume the session before capturing a question.")
+            return nil
+        }
+        guard settingsStore.hasAPIKey(for: .openAI) else {
+            reportRegionCaptureIssue("Add your OpenAI API key in Settings → API, then press ⌃⌥C again.")
+            return nil
+        }
+        guard permissions.screenCapturePreflight() else {
+            reportRegionCaptureIssue("Open Settings → General → Permissions to enable Screen Recording, then quit and reopen Smarty before trying ⌃⌥C again.")
+            return nil
+        }
+        let id = UUID()
+        regionCaptureID = id
+        regionCaptureMessage = "Drag over text to copy · Esc to cancel"
+        lastErrorMessage = nil
+        return id
+    }
+
+    /// Reserve for copying the selected image and answering it with OpenAI vision.
+    func beginCopyRegionImageCapture() -> UUID? {
+        guard regionCaptureID == nil else { return nil }
+        guard !isGeneratingAnswer, status != .thinking, status != .streaming, !isWhisperTranscribing else {
+            reportRegionCaptureIssue("Wait for the current answer before selecting another question.")
+            return nil
+        }
+        guard status != .paused else {
+            reportRegionCaptureIssue("Resume the session before capturing a question.")
+            return nil
+        }
+        guard settingsStore.hasAPIKey(for: .openAI) else {
+            reportRegionCaptureIssue("Add your OpenAI API key in Settings → API, then press ⌃⌥R again.")
+            return nil
+        }
+        guard permissions.screenCapturePreflight() else {
+            reportRegionCaptureIssue("Open Settings → General → Permissions to enable Screen Recording, then quit and reopen Smarty before trying ⌃⌥R again.")
+            return nil
+        }
+        let id = UUID()
+        regionCaptureID = id
+        regionCaptureMessage = "Drag over the area to capture · Esc to cancel"
         lastErrorMessage = nil
         return id
     }
@@ -615,10 +675,6 @@ final class InterviewSessionManager {
             guard let attachment = ImageAttachment.make(
                 from: NSImage(cgImage: image, size: .zero), preferredMIME: .png
             ) else { throw ScreenCaptureError.imageEncodingFailed }
-            regionCaptureMessage = "Reading selected question…"
-            // OCR is supplemental: diagrams and OCR failures still use the image directly.
-            await ocr.reset()
-            let text = (try? await ocr.recognizeText(in: image, accuracy: .accurate))?.trimmed ?? ""
             try Task.checkCancellation()
             guard regionCaptureID == captureID, status != .paused else { return }
             cancelRegionCapture()
@@ -629,15 +685,126 @@ final class InterviewSessionManager {
             including diagrams, formulas, code, and answer choices. If there are multiple questions,
             answer each in order. If the question is incomplete or unreadable, explain what is missing
             instead of inventing details. Ignore unrelated earlier screen or speech context.
-            \(text.isEmpty ? "" : "Supplemental OCR from this selection:\n" + text)
             """
             await requestAI(
                 force: true, skipSummarization: true,
-                displayQuestion: text.isEmpty ? "Selected screenshot question" : text,
-                userOverride: instruction, images: [attachment]
+                displayQuestion: "Selected screenshot question",
+                userOverride: instruction,
+                images: [attachment],
+                providerOverride: .openAI,
+                modelOverride: AppSettings.defaultOpenAIAnswerModel
             )
         } catch is CancellationError {
             // Cancellation is silent and never submits an image.
+        } catch {
+            guard regionCaptureID == captureID else { return }
+            reportRegionCaptureIssue(error.localizedDescription)
+        }
+    }
+
+    /// Region-select → OpenAI vision transcription → clipboard + answer. No Apple OCR or AX extraction.
+    func copyRegionTextToClipboard(_ region: ScreenRegion, captureID: UUID) async {
+        guard regionCaptureID == captureID else { return }
+        defer {
+            if regionCaptureID == captureID { cancelRegionCapture() }
+        }
+        regionCaptureMessage = "Reading selected text with OpenAI…"
+        do {
+            let image = try await screenCapture.captureRegion(displayID: region.displayID, rect: region.rect)
+            guard let attachment = ImageAttachment.make(
+                from: NSImage(cgImage: image, size: .zero), preferredMIME: .png
+            ) else { throw ScreenCaptureError.imageEncodingFailed }
+            try Task.checkCancellation()
+            guard regionCaptureID == captureID else { return }
+            let text = try await aiClient.complete(
+                apiKey: settingsStore.apiKey(for: .openAI),
+                request: OpenAIRequest(
+                    provider: .openAI,
+                    model: AppSettings.defaultOpenAIAnswerModel,
+                    instructions: """
+                    Transcribe the text visible in the attached screenshot exactly. Preserve reading order,
+                    line breaks, punctuation, formulas, and code indentation. Return only the transcribed
+                    text with no explanation, summary, labels, or Markdown fences.
+                    """,
+                    input: "Transcribe every readable character in this selected screen region.",
+                    temperature: 0,
+                    stream: false,
+                    images: [attachment]
+                )
+            ).trimmed
+            try Task.checkCancellation()
+            guard regionCaptureID == captureID else { return }
+            guard !text.isEmpty else {
+                cancelRegionCapture()
+                reportRegionCaptureIssue("OpenAI could not find readable text in that selection.")
+                return
+            }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            cancelRegionCapture()
+            regionCaptureMessage = "Copied \(text.count) characters · Asking OpenAI…"
+            lastErrorMessage = nil
+            allowAIWithoutFullSession = true
+            await requestAI(
+                force: true,
+                skipSummarization: true,
+                displayQuestion: text,
+                userOverride: """
+                Answer the question or task in the attached selected screenshot. The exact text OpenAI
+                transcribed is included below. Use the image as the source of truth for formulas, diagrams,
+                tables, answer choices, and layout. For mathematics, show the necessary working, verify the
+                arithmetic, and clearly identify the final answer.
+
+                Transcribed question:
+                \(text)
+                """,
+                images: [attachment],
+                providerOverride: .openAI,
+                modelOverride: AppSettings.defaultOpenAIAnswerModel
+            )
+        } catch is CancellationError {
+            // Silent — no partial copy on cancel.
+        } catch {
+            guard regionCaptureID == captureID else { return }
+            reportRegionCaptureIssue(error.localizedDescription)
+        }
+    }
+
+    /// Region-select → clipboard image + OpenAI vision answer from the exact same pixels.
+    func copyRegionImageToClipboard(_ region: ScreenRegion, captureID: UUID) async {
+        guard regionCaptureID == captureID else { return }
+        defer {
+            if regionCaptureID == captureID { cancelRegionCapture() }
+        }
+        regionCaptureMessage = "Capturing selected area…"
+        do {
+            let image = try await screenCapture.captureRegion(displayID: region.displayID, rect: region.rect)
+            try Task.checkCancellation()
+            guard regionCaptureID == captureID else { return }
+            let nsImage = NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
+            guard let attachment = ImageAttachment.make(from: nsImage, preferredMIME: .png) else {
+                throw ScreenCaptureError.imageEncodingFailed
+            }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.writeObjects([nsImage])
+            cancelRegionCapture()
+            lastErrorMessage = nil
+            allowAIWithoutFullSession = true
+            await requestAI(
+                force: true,
+                skipSummarization: true,
+                displayQuestion: "Selected screenshot question",
+                userOverride: """
+                Answer the question or task shown in the attached selected screenshot. Use the image as
+                the source of truth, including diagrams, formulas, code, tables, and answer choices. If
+                content is incomplete or unreadable, state what is missing instead of inventing details.
+                """,
+                images: [attachment],
+                providerOverride: .openAI,
+                modelOverride: AppSettings.defaultOpenAIAnswerModel
+            )
+        } catch is CancellationError {
+            // Silent — no partial copy on cancel.
         } catch {
             guard regionCaptureID == captureID else { return }
             reportRegionCaptureIssue(error.localizedDescription)
@@ -788,10 +955,10 @@ final class InterviewSessionManager {
         resetWhisperTimer()
     }
 
-    private func performScreenshotSolve(accuracy: OCRAccuracy) async {
+    private func performScreenshotSolve() async {
         guard regionCaptureID == nil else { return }
-        guard settingsStore.hasAPIKey else {
-            presentError(missingProviderKeyMessage)
+        guard settingsStore.hasAPIKey(for: .openAI) else {
+            presentError("Add your OpenAI API key in Settings to solve screenshots.")
             return
         }
         guard status != .thinking, status != .streaming else { return }
@@ -809,30 +976,33 @@ final class InterviewSessionManager {
             let image = try await screenCapture.captureFrame(
                 displayID: settingsStore.settings.selectedDisplayID
             )
-            await ocr.reset()
-            guard let text = try await ocr.recognizeText(in: image, accuracy: accuracy), !text.isBlank else {
-                presentError("No readable text found on screen.")
-                return
-            }
+            guard let attachment = ImageAttachment.make(
+                from: NSImage(cgImage: image, size: .zero), preferredMIME: .png
+            ) else { throw ScreenCaptureError.imageEncodingFailed }
 
-            await contextStore.appendOCR(OCRSnapshot(text: text))
-            pendingQuestion = text
+            pendingQuestion = "Solve what's on screen"
             await requestAI(
                 force: true,
                 skipSummarization: true,
                 interruptCurrent: true,
-                displayQuestion: text,
+                displayQuestion: "Solve what's on screen",
                 userOverride: """
-                Screen capture mode. Solve the problem shown on screen using the OCR text below.
+                Screen capture mode. Inspect the attached screenshot directly and solve the problem shown.
+                Use the image as the source of truth, including diagrams, formulas, code, tables, and
+                answer choices. If there are multiple questions, answer each in order. If important content
+                is unreadable or incomplete, say what is missing instead of inventing details.
+
                 Speak the answer like an interview explanation (first person, conversational), with markdown
                 examples/code when useful. Light everyday grammar is fine; keep technical terms precise.
 
                 If this is an algorithm/coding/DSA problem: give multiple solution variations when possible
                 (typically 2–3) — brute force, optimal, and an alternate/tradeoff when useful.
 
-                OCR:
-                \(text)
-                """
+                Ignore unrelated earlier screen or speech context.
+                """,
+                images: [attachment],
+                providerOverride: .openAI,
+                modelOverride: AppSettings.defaultOpenAIAnswerModel
             )
         } catch {
             presentError(error.localizedDescription)
@@ -1049,13 +1219,17 @@ final class InterviewSessionManager {
         replaceLatestTurn: Bool = false,
         displayQuestion: String? = nil,
         userOverride: String? = nil,
-        images: [ImageAttachment] = []
+        images: [ImageAttachment] = [],
+        providerOverride: AIProvider? = nil,
+        modelOverride: String? = nil
     ) async {
+        let requestProvider = providerOverride ?? settingsStore.settings.provider
+        let requestAPIKey = settingsStore.apiKey(for: requestProvider)
         let canRun = isRunning || allowAIWithoutFullSession
         guard regionCaptureID == nil else { return }
         guard canRun, status != .paused else { return }
-        guard settingsStore.hasAPIKey else {
-            presentError(missingProviderKeyMessage)
+        guard settingsStore.hasAPIKey(for: requestProvider) else {
+            presentError("Add your \(requestProvider.displayName) API key in Settings.")
             return
         }
 
@@ -1106,9 +1280,9 @@ final class InterviewSessionManager {
             summarizeTask = Task { [weak self] in
                 guard let self else { return }
                 await self.summarizer.summarizeIfNeeded(
-                    apiKey: self.settingsStore.apiKey,
-                    provider: settings.provider,
-                    model: settings.model,
+                    apiKey: requestAPIKey,
+                    provider: requestProvider,
+                    model: modelOverride ?? settings.model,
                     store: self.contextStore,
                     maxTokens: settings.maxContextTokens
                 )
@@ -1121,7 +1295,16 @@ final class InterviewSessionManager {
             userOverride ?? leanQuestion,
             maxTokens: 900
         )
-        await contextStore.appendUser(questionSeed.isBlank ? leanQuestion : questionSeed)
+        // Read the prior turns *before* recording this question, so the model sees the conversation so far
+        // and follow-ups ("do it in Java instead", "why is that O(n)?") resolve against what was said.
+        let priorTurns = await contextStore.promptHistory()
+        let priorSummary = await contextStore.summary
+        let userTurn = questionSeed.isBlank ? leanQuestion : questionSeed
+        await contextStore.appendUser(userTurn)
+        if !replaceLatestTurn {
+            history.append(ConversationMessage(role: .user, content: userTurn))
+            settingsStore.recentHistory = history
+        }
         guard activeGenerationID == generationID, isGeneratingAnswer else { return }
 
         let role = settings.roleProfile
@@ -1131,19 +1314,32 @@ final class InterviewSessionManager {
             length: settings.answerLength,
             role: role
         )
-        let technicalInstructions = Self.technicalSpokenInstructions(for: role) + "\n\n" + sessionGuidance
+        var technicalInstructions = Self.technicalSpokenInstructions(for: role) + "\n\n" + sessionGuidance
+        if !priorSummary.isBlank {
+            // Turns older than `promptHistory` survive here in compressed form.
+            technicalInstructions += "\n\n## Earlier in this interview\n"
+                + TokenEstimator.truncateToTokenBudget(priorSummary, maxTokens: 400)
+        }
+        if !priorTurns.isEmpty {
+            technicalInstructions += """
 
-        let fastModel = settings.provider == .openAI
-            ? (settings.model.hasPrefix("gpt-4o") ? settings.model : "gpt-4o-mini")
-            : settings.model
+
+            Earlier questions and answers in this session are included as prior turns.
+            Stay consistent with them. If this is a follow-up, revise the previous answer rather than starting over.
+            """
+        }
+
+        let configuredModel = modelOverride ?? settings.model
+        let fastModel = configuredModel
         let technicalRequest = OpenAIRequest(
-            provider: settings.provider,
+            provider: requestProvider,
             model: fastModel,
             instructions: technicalInstructions,
             input: leanInput,
             temperature: min(settings.temperature, 0.55),
             stream: false,
-            images: images
+            images: images,
+            history: priorTurns
         )
 
         streamTask = Task { [weak self] in
@@ -1152,7 +1348,7 @@ final class InterviewSessionManager {
                 guard self.activeGenerationID == generationID else { return }
                 // 1) Technical spoken answer — show ASAP (no pause for friendly / key terms).
                 let technical = try await self.aiClient.complete(
-                    apiKey: self.settingsStore.apiKey,
+                    apiKey: requestAPIKey,
                     request: technicalRequest
                 )
                 try Task.checkCancellation()
@@ -1161,7 +1357,7 @@ final class InterviewSessionManager {
 
                 // 2) Friendly answer in a second call (does not delay the first paint).
                 let friendlyRequest = OpenAIRequest(
-                    provider: settings.provider,
+                    provider: requestProvider,
                     model: fastModel,
                     instructions: Self.friendlyExplainInstructions,
                     input: """
@@ -1175,7 +1371,7 @@ final class InterviewSessionManager {
                     stream: false
                 )
                 let friendly = try await self.aiClient.complete(
-                    apiKey: self.settingsStore.apiKey,
+                    apiKey: requestAPIKey,
                     request: friendlyRequest
                 )
                 try Task.checkCancellation()
@@ -1183,7 +1379,13 @@ final class InterviewSessionManager {
                 await self.publishFriendlyAnswer(friendly, turnID: turnID, generationID: generationID)
 
                 // 3) Key terms last (never blocks answers).
-                self.refreshKeyTerms(from: technical, generationID: generationID)
+                self.refreshKeyTerms(
+                    from: technical,
+                    generationID: generationID,
+                    provider: requestProvider,
+                    model: fastModel,
+                    apiKey: requestAPIKey
+                )
             } catch is CancellationError {
                 if self.activeGenerationID == generationID {
                     self.recoverStatusAfterInterrupt()
@@ -1227,11 +1429,21 @@ final class InterviewSessionManager {
         First person. Natural interview cadence. Precise domain terms. Markdown/code only when needed.
         Keep it tight — about 30–60 seconds of speech. No second “simple” version. No preamble.
         Do not invent employers, metrics, or tools not implied by the question.
+        Stay consistent with earlier turns in this interview. Follow-ups refer to the previous answer —
+        revise it, do not start from scratch. Do not contradict facts, names, numbers, or examples already given.
         """
 
         if role.expectsCoding {
             lines += "\nFor coding/DSA: prefer the optimal approach first with brief complexity; one short code block if useful."
+        } else {
+            lines += """
+
+            This is not a software-engineering interview. Do not answer with algorithms, Big-O, LeetCode patterns,
+            or production code unless the interviewer explicitly asks for code. Use the role's own methods.
+            """
         }
+
+        lines += "\nFor mathematics: reason carefully, show enough working to audit the solution, verify arithmetic and signs, and clearly state the final answer."
 
         return lines + "\n\n" + InlineTechnicalExplanationFormat.rules
     }
@@ -1283,7 +1495,12 @@ final class InterviewSessionManager {
         replaceLatestTurnOnFinish = false
 
         await contextStore.appendAssistant(trimmed)
-        history.append(ConversationMessage(role: .assistant, content: trimmed))
+        if replaceLatestTurnOnFinish,
+           let idx = history.lastIndex(where: { $0.role == .assistant }) {
+            history[idx] = ConversationMessage(role: .assistant, content: trimmed)
+        } else {
+            history.append(ConversationMessage(role: .assistant, content: trimmed))
+        }
         settingsStore.recentHistory = history
         allowAIWithoutFullSession = false
 
@@ -1322,12 +1539,20 @@ final class InterviewSessionManager {
         isRunning = false
     }
 
-    private func refreshKeyTerms(from answer: String, generationID: UUID) {
+    private func refreshKeyTerms(
+        from answer: String,
+        generationID: UUID,
+        provider: AIProvider,
+        model: String,
+        apiKey: String
+    ) {
         keyTermsTask?.cancel()
         keyTermsTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let cards = try await self.extractKeyTerms(from: answer)
+                let cards = try await self.extractKeyTerms(
+                    from: answer, provider: provider, model: model, apiKey: apiKey
+                )
                 guard !Task.isCancelled, self.activeGenerationID == generationID else { return }
                 self.keyTerms = cards
             } catch {
@@ -1336,13 +1561,18 @@ final class InterviewSessionManager {
         }
     }
 
-    private func extractKeyTerms(from answer: String) async throws -> [KeyTermCard] {
+    private func extractKeyTerms(
+        from answer: String,
+        provider: AIProvider,
+        model: String,
+        apiKey: String
+    ) async throws -> [KeyTermCard] {
         let snippet = TokenEstimator.truncateToTokenBudget(answer, maxTokens: 1200)
         let raw = try await aiClient.complete(
-            apiKey: settingsStore.apiKey,
+            apiKey: apiKey,
             request: OpenAIRequest(
-                provider: settingsStore.settings.provider,
-                model: settingsStore.settings.model,
+                provider: provider,
+                model: model,
                 instructions: """
                 Extract 3–6 important terms from the interview answer that matter for a \(settingsStore.settings.roleProfile.field.displayName) role.
                 Return ONLY a JSON array (no markdown) of objects:

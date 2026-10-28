@@ -25,24 +25,40 @@ final class ScreenRegionGeometryTests: XCTestCase {
         }
     }
 
-    func testPixelAlignmentAtStandardAndRetinaScale() throws {
+    func testPixelCropAtStandardAndRetinaScale() throws {
         let rect = CGRect(x: 10.25, y: 20.25, width: 100.5, height: 50.5)
         let size = CGSize(width: 1440, height: 900)
-        XCTAssertEqual(try ScreenRegionGeometry.captureRect(rect, displaySize: size, scale: 1),
+        XCTAssertEqual(try ScreenRegionGeometry.pixelCropRect(
+            rect, displaySize: size, imageSize: size
+        ),
                        CGRect(x: 11, y: 21, width: 99, height: 49))
-        XCTAssertEqual(try ScreenRegionGeometry.captureRect(rect, displaySize: size, scale: 2),
-                       CGRect(x: 10.5, y: 20.5, width: 100, height: 50))
+        XCTAssertEqual(try ScreenRegionGeometry.pixelCropRect(
+            rect, displaySize: size, imageSize: CGSize(width: 2880, height: 1800)
+        ),
+                       CGRect(x: 21, y: 41, width: 200, height: 100))
     }
 
     func testCaptureClipsEdgesAndRejectsInvalidInput() throws {
         let size = CGSize(width: 100, height: 100)
-        XCTAssertEqual(try ScreenRegionGeometry.captureRect(
-            CGRect(x: -10, y: 80, width: 140, height: 40), displaySize: size, scale: 2
-        ), CGRect(x: 0, y: 80, width: 100, height: 20))
+        XCTAssertEqual(try ScreenRegionGeometry.pixelCropRect(
+            CGRect(x: -10, y: 80, width: 140, height: 40),
+            displaySize: size,
+            imageSize: CGSize(width: 200, height: 200)
+        ), CGRect(x: 0, y: 160, width: 200, height: 40))
         for rect in [CGRect.zero, CGRect(x: 101, y: 0, width: 20, height: 20),
                      CGRect(x: 0, y: 0, width: 7, height: 10),
                      CGRect(x: CGFloat.nan, y: 0, width: 20, height: 20)] {
-            XCTAssertThrowsError(try ScreenRegionGeometry.captureRect(rect, displaySize: size, scale: 2))
+            XCTAssertThrowsError(try ScreenRegionGeometry.pixelCropRect(
+                rect, displaySize: size, imageSize: CGSize(width: 200, height: 200)
+            ))
         }
+    }
+
+    func testPixelCropUsesActualScalePerAxis() throws {
+        XCTAssertEqual(try ScreenRegionGeometry.pixelCropRect(
+            CGRect(x: 10, y: 20, width: 30, height: 40),
+            displaySize: CGSize(width: 100, height: 100),
+            imageSize: CGSize(width: 200, height: 300)
+        ), CGRect(x: 20, y: 60, width: 60, height: 120))
     }
 }

@@ -6,6 +6,10 @@ enum HotkeyAction: UInt32, CaseIterable, Sendable {
     case toggleOverlay = 1
     case togglePause = 2
     case captureRegion = 3
+    case copyRegionText = 4
+    case copyRegionImage = 5
+    case solveScreen = 6
+    case toggleDiagnostics = 7
 }
 
 /// Nonisolated relay so Carbon callbacks never touch a @MainActor object off-queue.
@@ -63,11 +67,19 @@ final class HotkeyService {
     func registerDefaults(
         onToggleOverlay: @escaping () -> Void,
         onTogglePause: @escaping () -> Void,
-        onCaptureRegion: @escaping () -> Void
+        onSolveScreen: @escaping () -> Void,
+        onCaptureRegion: @escaping () -> Void,
+        onCopyRegionText: @escaping () -> Void,
+        onCopyRegionImage: @escaping () -> Void,
+        onToggleDiagnostics: @escaping () -> Void
     ) -> Bool {
         HotkeyRelay.shared.setHandler(id: HotkeyAction.toggleOverlay.rawValue, handler: onToggleOverlay)
         HotkeyRelay.shared.setHandler(id: HotkeyAction.togglePause.rawValue, handler: onTogglePause)
+        HotkeyRelay.shared.setHandler(id: HotkeyAction.solveScreen.rawValue, handler: onSolveScreen)
         HotkeyRelay.shared.setHandler(id: HotkeyAction.captureRegion.rawValue, handler: onCaptureRegion)
+        HotkeyRelay.shared.setHandler(id: HotkeyAction.copyRegionText.rawValue, handler: onCopyRegionText)
+        HotkeyRelay.shared.setHandler(id: HotkeyAction.copyRegionImage.rawValue, handler: onCopyRegionImage)
+        HotkeyRelay.shared.setHandler(id: HotkeyAction.toggleDiagnostics.rawValue, handler: onToggleDiagnostics)
 
         installHandlerIfNeeded()
 
@@ -81,7 +93,23 @@ final class HotkeyService {
             keyCode: UInt32(kVK_ANSI_P),
             modifiers: UInt32(cmdKey | shiftKey)
         )
-        return register(action: .captureRegion, keyCode: UInt32(kVK_ANSI_S), modifiers: UInt32(controlKey | optionKey))
+        let solveScreenRegistered = register(
+            action: .solveScreen, keyCode: UInt32(kVK_ANSI_S), modifiers: UInt32(controlKey | optionKey)
+        )
+        let captureRegistered = register(
+            action: .captureRegion, keyCode: UInt32(kVK_ANSI_A), modifiers: UInt32(controlKey | optionKey)
+        )
+        let copyTextRegistered = register(
+            action: .copyRegionText, keyCode: UInt32(kVK_ANSI_C), modifiers: UInt32(controlKey | optionKey)
+        )
+        let copyImageRegistered = register(
+            action: .copyRegionImage, keyCode: UInt32(kVK_ANSI_R), modifiers: UInt32(controlKey | optionKey)
+        )
+        // Diagnostics is a debugging aid; it stays reachable from the menu bar if ⌃⌥D is taken.
+        register(
+            action: .toggleDiagnostics, keyCode: UInt32(kVK_ANSI_D), modifiers: UInt32(controlKey | optionKey)
+        )
+        return solveScreenRegistered && captureRegistered && copyTextRegistered && copyImageRegistered
     }
 
     func unregisterAll() {

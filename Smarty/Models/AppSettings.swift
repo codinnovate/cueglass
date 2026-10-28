@@ -2,6 +2,8 @@ import Foundation
 import CoreGraphics
 
 struct AppSettings: Codable, Equatable, Sendable {
+    static let defaultOpenAIAnswerModel = "gpt-5.6-sol"
+
     var provider: AIProvider
     var model: String
     var temperature: Double
@@ -17,6 +19,10 @@ struct AppSettings: Codable, Equatable, Sendable {
     var positionLocked: Bool
     /// Requests best-effort window exclusion; recording apps may still capture Smarty.
     var blindModeEnabled: Bool
+    /// Opt-in: raise the overlay to the maximum window level so it can sit above kiosk-style
+    /// apps that pin their own window at a high level. No effect on a display the app captures
+    /// exclusively (`CGDisplayCapture`).
+    var overlayAboveEverything: Bool
     /// When true, the status badge pulses while listening / thinking.
     var statusBlinkEnabled: Bool
     /// Menu bar item; the overlay can also be restored using ⌘⇧H or by reopening the app.
@@ -72,7 +78,7 @@ struct AppSettings: Codable, Equatable, Sendable {
 
     static let `default` = AppSettings(
         provider: .openAI,
-        model: "gpt-4o-mini",
+        model: defaultOpenAIAnswerModel,
         temperature: 0.7,
         captureInterval: 1.0,
         overlayOpacity: 0.92,
@@ -85,6 +91,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         clickThroughEnabled: false,
         positionLocked: false,
         blindModeEnabled: true,
+        overlayAboveEverything: false,
         statusBlinkEnabled: true,
         showMenuBarIcon: true,
         assistantMode: .whisper,
@@ -113,6 +120,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         clickThroughEnabled: Bool,
         positionLocked: Bool,
         blindModeEnabled: Bool,
+        overlayAboveEverything: Bool = false,
         statusBlinkEnabled: Bool,
         showMenuBarIcon: Bool = true,
         assistantMode: AssistantMode,
@@ -139,6 +147,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         self.clickThroughEnabled = clickThroughEnabled
         self.positionLocked = positionLocked
         self.blindModeEnabled = blindModeEnabled
+        self.overlayAboveEverything = overlayAboveEverything
         self.statusBlinkEnabled = statusBlinkEnabled
         self.showMenuBarIcon = showMenuBarIcon
         self.assistantMode = assistantMode
@@ -169,6 +178,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         clickThroughEnabled = try c.decodeIfPresent(Bool.self, forKey: .clickThroughEnabled) ?? d.clickThroughEnabled
         positionLocked = try c.decodeIfPresent(Bool.self, forKey: .positionLocked) ?? d.positionLocked
         blindModeEnabled = try c.decodeIfPresent(Bool.self, forKey: .blindModeEnabled) ?? true
+        overlayAboveEverything = try c.decodeIfPresent(Bool.self, forKey: .overlayAboveEverything) ?? false
         statusBlinkEnabled = try c.decodeIfPresent(Bool.self, forKey: .statusBlinkEnabled) ?? true
         showMenuBarIcon = try c.decodeIfPresent(Bool.self, forKey: .showMenuBarIcon) ?? true
         assistantMode = try c.decodeIfPresent(AssistantMode.self, forKey: .assistantMode) ?? .whisper

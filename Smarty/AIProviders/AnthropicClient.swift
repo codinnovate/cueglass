@@ -157,17 +157,17 @@ actor AnthropicClient: AIProviderClienting {
             ])
         }
 
+        var messages: [[String: Any]] = ConversationHistorySanitizer.sanitize(request.history).map { message in
+            ["role": message.role == .assistant ? "assistant" : "user", "content": message.content]
+        }
+        messages.append(["role": "user", "content": userContent])
+
         var payload: [String: Any] = [
             "model": request.model,
             "system": request.instructions,
             "max_tokens": defaultMaxTokens,
             "stream": stream,
-            "messages": [
-                [
-                    "role": "user",
-                    "content": userContent
-                ]
-            ]
+            "messages": messages
         ]
         if request.provider.supportsTemperature(request.model) {
             payload["temperature"] = request.temperature

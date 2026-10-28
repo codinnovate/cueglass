@@ -9,7 +9,15 @@ actor ContextStore {
 
     private let maxTranscript = 40
     private let maxOCR = 20
-    private let maxConversation = 30
+    private let maxConversation = 40
+
+    init(conversation: [ConversationMessage] = [], summary: String = "") {
+        self.conversation = conversation
+        self.summary = summary
+        if conversation.count > maxConversation {
+            self.conversation.removeFirst(conversation.count - maxConversation)
+        }
+    }
 
     func appendTranscript(_ chunk: TranscriptChunk) {
         transcriptChunks.append(chunk)
@@ -59,6 +67,23 @@ actor ContextStore {
 
     func recentOCR(limit: Int = 5) -> String {
         ocrSnapshots.suffix(limit).map(\.text).joined(separator: "\n---\n")
+    }
+
+    /// Prior turns for the live answer call — oldest first, each turn clipped and the whole run capped so
+    /// the hot path stays small. The question being asked right now is appended by the client, not here.
+    func promptHistory(turns: Int = 20, maxTokens: Int = 2800) -> [ConversationMessage] {
+        var selected: [ConversationMessage] = []
+        var used = 0
+        for message in conversation.suffix(turns).reversed() {
+            let clipped = TokenEstimator.truncateToTokenBudget(message.content, maxTokens: 480)
+            let cost = TokenEstimator.estimateTokens(in: clipped)
+            if used + cost > maxTokens { break }
+            used += cost
+            selected.append(
+                ConversationMessage(role: message.role, content: clipped, createdAt: message.createdAt)
+            )
+        }
+        return selected.reversed()
     }
 
     func snapshotForPrompt(maxTokens: Int) -> ContextSnapshot {

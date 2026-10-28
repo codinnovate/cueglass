@@ -143,13 +143,16 @@ actor DeepSeekClient: AIProviderClienting {
             userInput += "\n\n[\(request.images.count) image attachment(s) omitted — DeepSeek's API does not support image input.]"
         }
 
+        var messages: [[String: Any]] = [["role": "system", "content": request.instructions]]
+        messages += ConversationHistorySanitizer.sanitize(request.history).map { message in
+            ["role": message.role.rawValue, "content": message.content]
+        }
+        messages.append(["role": "user", "content": userInput])
+
         var payload: [String: Any] = [
             "model": request.model,
             "stream": stream,
-            "messages": [
-                ["role": "system", "content": request.instructions],
-                ["role": "user", "content": userInput]
-            ]
+            "messages": messages
         ]
         if request.provider.supportsTemperature(request.model) {
             payload["temperature"] = request.temperature

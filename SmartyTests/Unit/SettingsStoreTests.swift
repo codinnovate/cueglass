@@ -3,6 +3,27 @@ import XCTest
 
 @MainActor
 final class SettingsStoreTests: XCTestCase {
+    func testDefaultAnswerModelIsGPT56Sol() {
+        XCTAssertEqual(AppSettings.default.provider, .openAI)
+        XCTAssertEqual(AppSettings.default.model, "gpt-5.6-sol")
+        XCTAssertEqual(AIProvider.openAI.defaultModels.first, "gpt-5.6-sol")
+        XCTAssertFalse(AIProvider.openAI.supportsTemperature("gpt-5.6-sol"))
+    }
+
+    func testMigratesFormerOpenAIDefaultToGPT56Sol() throws {
+        let keychain = FakeKeychain()
+        let suite = "smarty.tests.settings.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        var legacy = AppSettings.default
+        legacy.model = "gpt-4o-mini"
+        defaults.set(try JSONEncoder().encode(legacy), forKey: "smarty.settings")
+
+        let store = SettingsStore(defaults: defaults, keychain: keychain)
+
+        XCTAssertEqual(store.settings.model, "gpt-5.6-sol")
+    }
+
     func testSaveAndReloadAPIKey() {
         let keychain = FakeKeychain()
         let suite = "smarty.tests.settings.\(UUID().uuidString)"
@@ -89,7 +110,37 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(decoded.roleProfile.field, .marketing)
         XCTAssertEqual(decoded.roleProfile.company, "Acme")
         XCTAssertFalse(decoded.roleProfile.expectsCoding)
-        XCTAssertEqual(decoded.roleProfile.displaySummary, "Growth Marketing Manager at Acme")
+        XCTAssertEqual(decoded.roleProfile.displaySummary, "Marketing / growth")
+        XCTAssertEqual(decoded.roleProfile.notes, "Lifecycle + paid social.")
+    }
+
+    func testMigratesEmptySoftwareRoleToGeneral() throws {
+        let keychain = FakeKeychain()
+        let suite = "smarty.tests.settings.role.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        var legacy = AppSettings.default
+        legacy.roleProfile = RoleProfile(field: .software)
+        defaults.set(try JSONEncoder().encode(legacy), forKey: "smarty.settings")
+
+        let store = SettingsStore(defaults: defaults, keychain: keychain)
+
+        XCTAssertEqual(store.settings.roleProfile.field, .general)
+    }
+
+    func testDoesNotMigrateNamedSoftwareRole() throws {
+        let keychain = FakeKeychain()
+        let suite = "smarty.tests.settings.rolekeep.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        var legacy = AppSettings.default
+        legacy.roleProfile = RoleProfile(title: "Backend Engineer", field: .software)
+        defaults.set(try JSONEncoder().encode(legacy), forKey: "smarty.settings")
+
+        let store = SettingsStore(defaults: defaults, keychain: keychain)
+
+        XCTAssertEqual(store.settings.roleProfile.field, .software)
+        XCTAssertEqual(store.settings.roleProfile.title, "Backend Engineer")
     }
 }
 

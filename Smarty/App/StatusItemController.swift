@@ -56,7 +56,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        menu.addItem(makeItem(title: "Capture Region and Answer  ⌃⌥S", action: #selector(captureRegion)))
+        menu.addItem(makeItem(title: "Solve Screen with OpenAI  ⌃⌥S", action: #selector(solveScreen)))
+        menu.addItem(makeItem(title: "Answer Region with OpenAI  ⌃⌥A", action: #selector(captureRegion)))
+        menu.addItem(makeItem(title: "Copy Region Text & Answer with OpenAI  ⌃⌥C", action: #selector(copyRegionText)))
+        menu.addItem(makeItem(title: "Copy Region Image & Answer  ⌃⌥R", action: #selector(copyRegionImage)))
 
         menu.addItem(makeItem(
             title: session.isRunning ? "Stop Session" : "Start Session",
@@ -70,6 +73,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        menu.addItem(makeItem(
+            title: environment.diagnostics.isVisible ? "Hide Diagnostics  ⌃⌥D" : "Show Diagnostics  ⌃⌥D",
+            action: #selector(toggleDiagnostics)
+        ))
         menu.addItem(makeItem(title: "Settings…", action: #selector(openSettings)))
         menu.addItem(makeItem(title: "Status: \(session.status.label)", action: nil, enabled: false))
 
@@ -92,6 +99,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     // MARK: - Actions
 
+    @objc private func solveScreen() {
+        environment.overlayManager.present(session: environment.session)
+        Task { @MainActor in await environment.session.screenshotSolve() }
+    }
+
     @objc private func toggleOverlay() {
         environment.overlayManager.toggle(session: environment.session)
     }
@@ -99,6 +111,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func captureRegion() {
         // Let menu tracking finish before presenting the selection panels.
         DispatchQueue.main.async { [weak self] in self?.environment.captureSelectedRegion() }
+    }
+
+    @objc private func copyRegionText() {
+        DispatchQueue.main.async { [weak self] in self?.environment.copyRegionText() }
+    }
+
+    @objc private func copyRegionImage() {
+        DispatchQueue.main.async { [weak self] in self?.environment.copyRegionImage() }
     }
 
     @objc private func toggleSession() {
@@ -110,6 +130,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 await session.startSession()
             }
         }
+    }
+
+    @objc private func toggleDiagnostics() {
+        environment.diagnostics.toggle()
     }
 
     @objc private func togglePause() {

@@ -24,7 +24,8 @@ final class OverlayManager {
             opacity: settings.overlayOpacity,
             locked: settings.positionLocked,
             clickThrough: settings.clickThroughEnabled,
-            blindMode: settings.blindModeEnabled
+            blindMode: settings.blindModeEnabled,
+            aboveEverything: settings.overlayAboveEverything
         )
         session.isClickThrough = settings.clickThroughEnabled
         session.isPositionLocked = settings.positionLocked
@@ -113,10 +114,18 @@ final class OverlayManager {
         refresh(session: session)
     }
 
+    /// Re-applies the overlay window level after the "above everything" opt-in changes.
+    func setAboveEverything(_ enabled: Bool, session: InterviewSessionManager) {
+        settingsStore.update { $0.overlayAboveEverything = enabled }
+        applyScreenShareExclusionToAllWindows()
+        refresh(session: session)
+    }
+
     func applyScreenShareExclusionToAllWindows() {
         let blind = settingsStore.settings.blindModeEnabled
+        let aboveEverything = settingsStore.settings.overlayAboveEverything
         // Settings and permission sheets retain their native window behavior.
-        panelController.applyOverlayBlindMode(blind)
+        panelController.applyOverlayBlindMode(blind, aboveEverything: aboveEverything)
         for window in NSApp.windows {
             if panelController.owns(window) { continue }
             window.sharingType = blind ? .none : .readWrite

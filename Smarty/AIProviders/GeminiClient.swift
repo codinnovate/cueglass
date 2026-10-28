@@ -232,11 +232,17 @@ actor GeminiClient: AIProviderClienting, SpeechTranscribing {
             generationConfig["temperature"] = request.temperature
         }
 
+        var contents: [[String: Any]] = ConversationHistorySanitizer.sanitize(request.history).map { message in
+            [
+                "role": message.role == .assistant ? "model" : "user",
+                "parts": [["text": message.content]]
+            ]
+        }
+        contents.append(["role": "user", "parts": parts])
+
         let payload: [String: Any] = [
             "system_instruction": ["parts": [["text": request.instructions]]],
-            "contents": [
-                ["role": "user", "parts": parts]
-            ],
+            "contents": contents,
             "generationConfig": generationConfig
         ]
 

@@ -17,6 +17,8 @@ struct MarkdownAnswerView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .code(let language, let code):
                     CodeBlockView(language: language, code: code, fontSize: fontSize)
+                case .math(let latex):
+                    MathBlockView(latex: latex, fontSize: fontSize)
                 }
             }
         }
@@ -26,6 +28,7 @@ struct MarkdownAnswerView: View {
     private enum Block {
         case prose(String)
         case code(language: String?, code: String)
+        case math(String)
     }
 
     private static func parseBlocks(_ raw: String) -> [Block] {
@@ -39,7 +42,7 @@ struct MarkdownAnswerView: View {
         func flushProse() {
             let joined = proseLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
             if !joined.isEmpty {
-                blocks.append(.prose(joined))
+                blocks.append(contentsOf: splitMathAndProse(joined))
             }
             proseLines.removeAll()
         }
@@ -74,6 +77,49 @@ struct MarkdownAnswerView: View {
         }
 
         return blocks.isEmpty ? [.prose(raw)] : blocks
+    }
+
+    /// Pulls display-math (`$$...$$`, `\[...\]`) out of a prose chunk into its own
+    /// blocks so it renders as typeset math instead of raw text; leftover prose
+    /// still gets inline math (`$...$`, `\(...\)`) flattened to unicode.
+    private static func splitMathAndProse(_ text: String) -> [Block] {
+        let ns = text as NSString
+        guard let regex = try? NSRegularExpression(pattern: #"\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]"#) else {
+            return [.prose(inlineMathTransform(text))]
+        }
+        var blocks: [Block] = []
+        var lastEnd = 0
+        for match in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            if match.range.location > lastEnd {
+                let before = ns.substring(with: NSRange(location: lastEnd, length: match.range.location - lastEnd))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !before.isEmpty { blocks.append(.prose(inlineMathTransform(before))) }
+            }
+            let group = match.range(at: 1).location != NSNotFound ? match.range(at: 1) : match.range(at: 2)
+            blocks.append(.math(ns.substring(with: group).trimmingCharacters(in: .whitespacesAndNewlines)))
+            lastEnd = match.range.location + match.range.length
+        }
+        if lastEnd < ns.length {
+            let tail = ns.substring(from: lastEnd).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !tail.isEmpty { blocks.append(.prose(inlineMathTransform(tail))) }
+        }
+        return blocks.isEmpty ? [.prose(text)] : blocks
+    }
+
+    private static func inlineMathTransform(_ text: String) -> String {
+        let ns = text as NSString
+        guard let regex = try? NSRegularExpression(pattern: #"\$([^\$\n]+?)\$|\\\(([\s\S]+?)\\\)"#) else { return text }
+        var result = ""
+        var lastEnd = 0
+        for match in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            result += ns.substring(with: NSRange(location: lastEnd, length: match.range.location - lastEnd))
+            let group = match.range(at: 1).location != NSNotFound ? match.range(at: 1) : match.range(at: 2)
+            let latex = ns.substring(with: group)
+            result += LaTeXMathParser.toPlainString(LaTeXMathParser.parse(latex))
+            lastEnd = match.range.location + match.range.length
+        }
+        result += ns.substring(from: lastEnd)
+        return result
     }
 
     private static func attributedProse(_ text: String, fontSize: Double, secondary: Bool) -> AttributedString {

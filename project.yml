@@ -55,7 +55,7 @@ targets:
         NSHighResolutionCapable: true
         NSMicrophoneUsageDescription: Cueglass listens to your microphone to transcribe interview questions and generate helpful responses.
         NSSpeechRecognitionUsageDescription: Cueglass uses speech recognition to understand interview questions in real time.
-        NSScreenCaptureUsageDescription: Cueglass captures your screen to read interview questions and coding problems via OCR. Frames are processed in memory and never saved.
+        NSScreenCaptureUsageDescription: Cueglass captures your screen to solve interview questions and coding problems. Explicit screen and region commands send the captured image to OpenAI; frames are processed in memory and never saved.
         NSAudioCaptureUsageDescription: Cueglass captures microphone audio to transcribe interview questions.
     entitlements:
       path: Smarty/Resources/Smarty.entitlements

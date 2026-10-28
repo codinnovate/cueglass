@@ -36,7 +36,7 @@
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Cueglass uses speech recognition to understand interview questions in real time.</string>
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>Cueglass captures your screen to read interview questions and coding problems via OCR. Frames are processed in memory and never saved.</string>
+	<string>Cueglass captures your screen to solve interview questions and coding problems. Explicit screen and region commands send the captured image to OpenAI; frames are processed in memory and never saved.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Cueglass captures microphone audio to transcribe interview questions.</string>
 </dict>

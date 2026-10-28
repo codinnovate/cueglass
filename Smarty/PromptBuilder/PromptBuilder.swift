@@ -15,7 +15,7 @@ struct PromptBuilder: Sendable {
 
         var guidance: [String] = [
             role.promptGuidance,
-            interviewFocus.promptGuidance,
+            interviewFocus.promptGuidance(expectsCoding: role.expectsCoding),
             answerLength.promptGuidance
         ]
         if role.expectsCoding, let languageLine = preferredLanguage.codingInstruction {
@@ -100,7 +100,7 @@ struct PromptBuilder: Sendable {
         length: AnswerLength,
         role: RoleProfile = .default
     ) -> String {
-        var lines = [role.promptGuidance, focus.promptGuidance, length.promptGuidance]
+        var lines = [role.promptGuidance, focus.promptGuidance(expectsCoding: role.expectsCoding), length.promptGuidance]
         if role.expectsCoding, let languageLine = language.codingInstruction {
             lines.append(languageLine)
         }

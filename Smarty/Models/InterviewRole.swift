@@ -3,6 +3,9 @@ import Foundation
 /// Broad field of the role the candidate is interviewing for.
 /// Drives how answers are framed and whether code belongs in an answer at all.
 enum InterviewRoleField: String, Codable, CaseIterable, Sendable, Identifiable {
+    case seniorAITrainer
+    case videoAnnotationExpert
+    case generalist
     case software
     case data
     case dataAnnotation
@@ -24,13 +27,15 @@ enum InterviewRoleField: String, Codable, CaseIterable, Sendable, Identifiable {
     case writing
     case administrative
     case retail
-    case generalist
     case general
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
+        case .seniorAITrainer: return "Senior AI trainer"
+        case .videoAnnotationExpert: return "Video Annotation Expert"
+        case .generalist: return "Generalist"
         case .software: return "Software engineering"
         case .data: return "Data / analytics / ML"
         case .dataAnnotation: return "Data annotation / AI training"
@@ -52,7 +57,6 @@ enum InterviewRoleField: String, Codable, CaseIterable, Sendable, Identifiable {
         case .writing: return "Writing / content / editorial"
         case .administrative: return "Administrative / executive support"
         case .retail: return "Retail / hospitality / service"
-        case .generalist: return "Generalist / cross-functional"
         case .general: return "Other / general"
         }
     }
@@ -67,6 +71,30 @@ enum InterviewRoleField: String, Codable, CaseIterable, Sendable, Identifiable {
 
     var promptGuidance: String {
         switch self {
+        case .seniorAITrainer:
+            return """
+            Field: senior AI trainer. Frame answers around writing and updating guidelines, calibrating \
+            annotators, reviewing quality, resolving disagreements against the rubric, coaching others, \
+            and protecting data quality at volume. You train people and processes — you do not write \
+            production software. Speak as a senior practitioner who owns quality, not as an engineer.
+            """
+        case .videoAnnotationExpert:
+            return """
+            Field: video annotation expert. Frame answers around watching clips, following the written \
+            guideline exactly, and labeling what the rubric asks for (actions, objects, attributes, \
+            timestamps, tracks, scene labels). Stay temporally consistent across frames. Tight boxes, \
+            correct start/end times, no extra labels outside the ontology. If a clip is ambiguous, \
+            occluded, blurry, off-screen, or out of taxonomy, flag it or use the allowed unsure/none \
+            option — never guess. Accuracy and consistency beat speed. This is not a software interview; \
+            do not give algorithms, Big-O, or code unless they explicitly ask.
+            """
+        case .generalist:
+            return """
+            Field: generalist. Expect a wide spread of AI training and ops work — text, image, or video \
+            labeling, light QA, following new guidelines quickly, and switching projects. Frame answers \
+            around adaptability, learning a rubric fast, staying consistent, flagging uncertainty, and \
+            owning messy tasks end to end. Do not default to software engineering.
+            """
         case .software:
             return "Field: software engineering. Expect coding, algorithms, system design, and engineering tradeoffs; use precise technical vocabulary."
         case .data:
@@ -115,8 +143,6 @@ enum InterviewRoleField: String, Codable, CaseIterable, Sendable, Identifiable {
             return "Field: administrative / executive support. Frame answers around calendar and inbox judgement, discretion with confidential information, juggling competing priorities, anticipating what people need, and keeping logistics on track."
         case .retail:
             return "Field: retail / hospitality / service. Frame answers around the customer experience, staying calm under pressure, handling complaints and difficult people, teamwork on shift, reliability, and safety or store standards."
-        case .generalist:
-            return "Field: generalist / cross-functional. Expect a wide, shallow spread — some operations, support, data, comms, and project work. Frame answers around adaptability, learning fast, owning ambiguous problems end to end, and prioritising when everything lands on one person."
         case .general:
             return "Field: general professional. Match the vocabulary and success measures of the role named above rather than defaulting to software engineering."
         }
@@ -125,6 +151,7 @@ enum InterviewRoleField: String, Codable, CaseIterable, Sendable, Identifiable {
 
 /// Menu grouping for the field picker — a flat list of every field is too long to scan.
 enum InterviewRoleCategory: String, CaseIterable, Sendable, Identifiable {
+    case aiTraining
     case technical
     case business
     case peopleAndService
@@ -134,7 +161,8 @@ enum InterviewRoleCategory: String, CaseIterable, Sendable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .technical: return "Technical & AI"
+        case .aiTraining: return "AI Training & Annotation"
+        case .technical: return "Technical"
         case .business: return "Business & Strategy"
         case .peopleAndService: return "People & Service"
         case .other: return "Other Fields"
@@ -142,20 +170,27 @@ enum InterviewRoleCategory: String, CaseIterable, Sendable, Identifiable {
     }
 
     var fields: [InterviewRoleField] {
-        InterviewRoleField.allCases.filter { $0.category == self }
+        switch self {
+        case .aiTraining:
+            return [.seniorAITrainer, .videoAnnotationExpert, .generalist, .dataAnnotation]
+        default:
+            return InterviewRoleField.allCases.filter { $0.category == self }
+        }
     }
 }
 
 extension InterviewRoleField {
     var category: InterviewRoleCategory {
         switch self {
-        case .software, .data, .dataAnnotation, .devops, .security, .research:
+        case .seniorAITrainer, .videoAnnotationExpert, .generalist, .dataAnnotation:
+            return .aiTraining
+        case .software, .data, .devops, .security, .research:
             return .technical
         case .product, .design, .marketing, .sales, .finance, .consulting, .operations:
             return .business
         case .customerSuccess, .people, .healthcare, .education, .retail, .administrative:
             return .peopleAndService
-        case .legal, .writing, .generalist, .general:
+        case .legal, .writing, .general:
             return .other
         }
     }
@@ -197,7 +232,7 @@ struct RoleProfile: Codable, Equatable, Sendable {
 
     init(
         title: String = "",
-        field: InterviewRoleField = .software,
+        field: InterviewRoleField = .general,
         company: String = "",
         notes: String = "",
         codingPreference: CodingPreference = .auto
@@ -214,31 +249,51 @@ struct RoleProfile: Codable, Equatable, Sendable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
-        field = try c.decodeIfPresent(InterviewRoleField.self, forKey: .field) ?? .software
+        field = try c.decodeIfPresent(InterviewRoleField.self, forKey: .field) ?? .general
         company = try c.decodeIfPresent(String.self, forKey: .company) ?? ""
         notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
         codingPreference = try c.decodeIfPresent(CodingPreference.self, forKey: .codingPreference) ?? .auto
     }
 
+    /// True when Field is still the generic default and no extra prompt was written.
+    var isUnset: Bool {
+        field == .general && notes.isBlank
+    }
+
+    /// Field used for prompting. If Field is still general/software, the optional prompt can
+    /// name annotation work and pull answers out of a software-engineering default.
+    var effectiveField: InterviewRoleField {
+        if let inferred = Self.inferredField(fromPrompt: notes),
+           field == .software || field == .general || field == inferred {
+            return inferred
+        }
+        return field
+    }
+
     /// True when coding solutions and a preferred programming language are relevant.
     var expectsCoding: Bool {
         switch codingPreference {
-        case .auto: return field.expectsCoding
+        case .auto: return effectiveField.expectsCoding
         case .include: return true
         case .exclude: return false
         }
     }
 
-    /// Short one-line label for UI, e.g. "Senior PM at Acme".
+    /// Short one-line label for UI.
     var displaySummary: String {
-        let name = title.isBlank ? field.displayName : title.trimmed
-        return company.isBlank ? name : "\(name) at \(company.trimmed)"
+        effectiveField.displayName
     }
 
-    /// Prompt fragment describing the role. Empty string when nothing useful is set.
+    /// Prompt fragment describing the role.
     var promptGuidance: String {
         var lines: [String] = ["Role the candidate is interviewing for: \(displaySummary)."]
-        lines.append(field.promptGuidance)
+        if effectiveField != field {
+            lines.append(
+                "The extra prompt describes \(effectiveField.displayName) work — frame every answer for that, "
+                + "not \(field.displayName)."
+            )
+        }
+        lines.append(effectiveField.promptGuidance)
         lines.append(
             "Answer the way a strong candidate for this role would speak — use that role's vocabulary, "
             + "frameworks, and measures of success. Do not default to software engineering framing."
@@ -248,13 +303,41 @@ struct RoleProfile: Codable, Equatable, Sendable {
                 "Do not treat this as a software engineering interview. Do not volunteer code, algorithm variations, "
                 + "or time/space complexity, and ignore any earlier instruction that demands multiple coding "
                 + "variations. If a hands-on exercise comes up, answer it with the tools of this field "
-                + "(a framework, a process, a calculation, a spreadsheet or SQL query) and only when asked."
+                + "(guidelines, a rubric, a process, a calculation, a spreadsheet or SQL query) and only when asked."
             )
         }
         if !notes.isBlank {
-            let trimmedNotes = TokenEstimator.truncateToTokenBudget(notes.trimmed, maxTokens: 300)
-            lines.append("Role context provided by the candidate (treat as background, never invent beyond it):\n\(trimmedNotes)")
+            let extra = TokenEstimator.truncateToTokenBudget(notes.trimmed, maxTokens: 400)
+            lines.append("Additional instructions from the candidate — follow these:\n\(extra)")
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// Best-effort field from the optional extra prompt.
+    static func inferredField(fromPrompt prompt: String) -> InterviewRoleField? {
+        let text = prompt.lowercased()
+        guard !text.isBlank else { return nil }
+
+        let rules: [(InterviewRoleField, [String])] = [
+            (
+                .videoAnnotationExpert,
+                ["video annotat", "video label", "timestamp", "bounding box", "clip labeling"]
+            ),
+            (
+                .seniorAITrainer,
+                ["senior ai trainer", "ai trainer", "train annotator", "calibrat"]
+            ),
+            (
+                .dataAnnotation,
+                [
+                    "annotat", "data label", "labeler", "labelling", "labeling",
+                    "ai training", "rlhf", "sft rater", "preference rank", "rating task"
+                ]
+            )
+        ]
+        for (field, needles) in rules where needles.contains(where: { text.contains($0) }) {
+            return field
+        }
+        return nil
     }
 }

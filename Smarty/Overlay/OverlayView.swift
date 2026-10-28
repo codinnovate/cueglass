@@ -22,13 +22,16 @@ struct OverlayView: View {
     @State private var micPulse = false
     @State private var showImageImporter = false
     @State private var showRoleEditor = false
+    @State private var showingCommandList = false
     @FocusState private var askFieldFocused: Bool
 
     private var isWhisper: Bool { assistantMode == .whisper }
 
     var body: some View {
         Group {
-            if isWhisper {
+            if showingCommandList {
+                commandListChrome
+            } else if isWhisper {
                 whisperChrome
             } else {
                 streamChrome
@@ -117,13 +120,25 @@ struct OverlayView: View {
 
     private var modeSwitcher: some View {
         Picker("Mode", selection: Binding(
-            get: { assistantMode },
-            set: { mode in
-                onModeChange?(mode)
+            get: {
+                if showingCommandList { return OverlayTab.commands }
+                return assistantMode == .whisper ? .whisper : .stream
+            },
+            set: { tab in
+                switch tab {
+                case .commands:
+                    showingCommandList = true
+                case .whisper:
+                    showingCommandList = false
+                    onModeChange?(.whisper)
+                case .stream:
+                    showingCommandList = false
+                    onModeChange?(.stream)
+                }
             }
         )) {
-            ForEach(AssistantMode.allCases) { mode in
-                Text(mode.title).tag(mode)
+            ForEach(OverlayTab.allCases) { tab in
+                Text(tab.title).tag(tab)
             }
         }
         .pickerStyle(.segmented)
@@ -178,24 +193,29 @@ struct OverlayView: View {
                     onRequestTypingFocus?()
                     showRoleEditor.toggle()
                 } label: {
-                    Image(systemName: "person.text.rectangle")
-                        .font(.system(size: fontSize))
+                    HStack(spacing: 4) {
+                        Image(systemName: "person.text.rectangle")
+                            .font(.system(size: fontSize))
+                        Text(role.isUnset ? "Set role" : role.displaySummary)
+                            .font(.system(size: max(10, fontSize - 3), weight: .medium))
+                            .lineLimit(1)
+                    }
                 }
                 .buttonStyle(.borderless)
-                .foregroundStyle(role.title.isBlank ? Color.orange : Color.primary)
+                .foregroundStyle(role.isUnset ? Color.orange : Color.primary)
                 .help(
-                    role.title.isBlank
-                        ? "No role set — answers default to \(role.field.displayName)"
+                    role.isUnset
+                        ? "Set the interview field — answers otherwise stay generic"
                         : "Role: \(role.displaySummary)"
                 )
                 .popover(isPresented: $showRoleEditor, arrowEdge: .bottom) {
                     Form {
-                        Section("Role You're Interviewing For") {
+                        Section("Interview Field") {
                             RoleFields(store: settingsStore)
                         }
                     }
                     .formStyle(.grouped)
-                    .frame(width: 420, height: 470)
+                    .frame(width: 420, height: 280)
                 }
             }
 
@@ -271,6 +291,14 @@ struct OverlayView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 14) {
                         Color.clear.frame(height: 1).id("answer-top")
+
+                        if let question = session.questionBeingAnswered {
+                            CurrentQuestionBlock(
+                                question: question,
+                                fontSize: fontSize,
+                                tint: answerTint(for: session.answeredTurns.count + 1)
+                            )
+                        }
 
                         if session.status == .thinking {
                             Text("Thinking…")
@@ -520,7 +548,7 @@ struct OverlayView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Screenshot")
                         .font(.system(size: fontSize - 1, weight: .semibold, design: .rounded))
-                    Text("Solve what’s on screen")
+                    Text("Solve what’s on screen · OpenAI direct · ⌃⌥S")
                         .font(.system(size: max(10, fontSize - 4)))
                         .foregroundStyle(.secondary)
                 }
@@ -597,7 +625,7 @@ struct OverlayView: View {
                     LazyVStack(alignment: .leading, spacing: 6) {
                         ForEach(session.history.reversed()) { message in
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(message.role == .assistant ? "Answer" : "Context")
+                                Text(message.role == .assistant ? "Answer" : "Question")
                                     .font(.system(size: fontSize - 3, weight: .semibold))
                                     .foregroundStyle(.secondary)
                                 Text(message.content)
@@ -742,6 +770,87 @@ struct OverlayView: View {
         .font(.system(size: fontSize - 2))
         .controlSize(.small)
     }
+
+    private var commandListChrome: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            modeSwitcher
+            header
+            captureNotice
+            Divider().opacity(0.35)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Command List")
+                        .font(.system(size: fontSize + 2, weight: .semibold, design: .rounded))
+
+                    Text("Global shortcuts work while Cueglass is in the background.")
+                        .font(.system(size: fontSize - 2))
+                        .foregroundStyle(.secondary)
+
+                    LazyVGrid(
+                        columns: [GridItem(.flexible(), alignment: .leading)],
+                        alignment: .leading,
+                        spacing: 10
+                    ) {
+                        commandItem("Solve the full screen with OpenAI vision", shortcut: "⌃⌥S")
+                        commandItem("Send a selected region to OpenAI for an answer", shortcut: "⌃⌥A")
+                        commandItem("Copy region text and answer with OpenAI", shortcut: "⌃⌥C")
+                        commandItem("Copy a region image and answer with OpenAI", shortcut: "⌃⌥R")
+                        commandItem("Show or hide the overlay", shortcut: "⌘⇧H")
+                        commandItem("Pause or resume the session", shortcut: "⌘⇧P")
+                    }
+
+                    Divider().opacity(0.35)
+
+                    Text("In-app actions")
+                        .font(.system(size: fontSize - 1, weight: .medium))
+                    Text("Whisper: tap the mic, then Send.  Stream: press Listen and pause after the question.  Screenshot buttons use the same direct OpenAI image flow as ⌃⌥S.")
+                        .font(.system(size: fontSize - 2))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 2)
+            }
+            .frame(maxHeight: .infinity)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Command List")
+    }
+
+    private func commandItem(_ title: String, shortcut: String) -> some View {
+        HStack(spacing: 6) {
+            Text(shortcut)
+                .font(.system(size: max(9, fontSize - 5), weight: .semibold, design: .monospaced))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .accessibilityLabel(shortcut)
+
+            Text(title)
+                .font(.system(size: max(10, fontSize - 4)))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private enum OverlayTab: String, CaseIterable, Identifiable {
+    case whisper
+    case stream
+    case commands
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .whisper: return "Whisper"
+        case .stream: return "Stream"
+        case .commands: return "Command List"
+        }
+    }
 }
 
 /// Soft alternating tag colors for answer cards (odd → green, even → blue).
@@ -769,7 +878,7 @@ private struct AnswerTurnBlock: View {
                     .font(.system(size: fontSize - 1, design: .rounded))
                     .foregroundStyle(.primary.opacity(0.85))
                     .textSelection(.enabled)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             answerLane(
@@ -820,6 +929,35 @@ private struct AnswerTurnBlock: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+private struct CurrentQuestionBlock: View {
+    let question: String
+    let fontSize: Double
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("CURRENT QUESTION")
+                .font(.system(size: max(10, fontSize - 4), weight: .bold, design: .rounded))
+                .foregroundStyle(tint)
+
+            Text(question)
+                .font(.system(size: fontSize, weight: .medium, design: .rounded))
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(tint.opacity(0.24), lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Current question: \(question)")
     }
 }
 

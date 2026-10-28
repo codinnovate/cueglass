@@ -8,10 +8,13 @@ No accounts, no backend, no analytics. Pick an AI provider in Settings, paste it
 
 - **Multiple AI providers** — OpenAI, Claude (Anthropic), Gemini (Google), or DeepSeek for answers; switch anytime in Settings → API. Each provider keeps its own key and model list, so switching doesn't lose the others.
 - **Whisper / Stream modes** — tap-to-record + Send, or Listen with pause detection
+- **Command List tab** — view every global shortcut from the overlay
 - **Floating overlay** with best-effort blind mode (`sharingType = .none`)
-- **Region capture and answer** — press Control–Option–S, drag over a question, and release to send the cropped screenshot; Escape cancels
+- **Full-screen overlay** — enable **Settings → Overlay → Overlay over high-level windows** for full-screen and borderless apps that permit other apps to run. Managed single-app kiosk and assessment modes may stop Cueglass, block its launch, and disable screen capture; the overlay cannot override those restrictions.
+- **Direct screen solve** — press Control–Option–S to send the full screenshot directly to OpenAI vision (no Apple OCR)
+- **OpenAI region commands** — answer, transcribe-and-copy, or copy-image-and-answer from one selected crop without Apple OCR
 - **Screen OCR** and **typed ask** with optional **image attachments** (multimodal on OpenAI, Claude, and Gemini; DeepSeek is text-only)
-- **Role brief** — set the job title, field, company, and notes for the role you're interviewing for; answers are framed for that field (non-technical roles drop code, algorithms, and Big-O)
+- **Interview field** — pick the kind of interview (overlay **Set role**, or Settings → Prompt), with an optional extra prompt. **AI Training & Annotation** includes Senior AI trainer, Video Annotation Expert, and Generalist. Answers follow that field instead of assuming software engineering. The session keeps prior Q&A so follow-ups stay consistent.
 - **Session presets** — interview focus, answer length, preferred coding language
 - **Key terms** panel and Markdown transcript export
 - Global shortcuts for overlay, pause, and start
@@ -45,13 +48,15 @@ No accounts, no backend, no analytics. Pick an AI provider in Settings, paste it
 
 6. Grant Microphone / Speech / Screen Recording when prompted.
 
+To keep Cueglass running independently of Xcode or Terminal, copy the signed `.app` to Applications and open it from Finder. **Settings → General → Launch at login** can start it when you sign in, but does not override another app's single-app restrictions.
+
 ## Privacy
 
 - Screenshots and attachment frames are processed in memory (not written as a capture archive)
 - Each provider's API key lives in its own Keychain entry
 - Settings, history, and window frame use UserDefaults
 - Only traffic to your selected AI provider (and OpenAI, unless Gemini is handling voice input) leaves the machine
-- Region screenshots are sent to your selected provider for visual answering (OpenAI, Claude, and Gemini support this; DeepSeek is text-only), with optional OCR; typed drafts and pending attachments remain separate
+- Explicit full-screen and region commands send their captured image directly to OpenAI. Passive Stream screen context may still use local Apple OCR; typed drafts and pending attachments remain separate.
 - No authentication / cloud account for Cueglass itself
 
 Blind mode requests exclusion for the selection panels and answer overlay before they appear.
@@ -65,16 +70,19 @@ Verify the remote viewer’s output for your exact app, browser, macOS version, 
 
 | Shortcut | Action |
 |----------|--------|
-| ⌃⌥S | Capture region and answer — global; drag then release, Escape cancels |
+| ⌃⌥S | Solve the full screen directly with OpenAI vision |
+| ⌃⌥A | Send a selected region to OpenAI for an answer |
+| ⌃⌥C | Transcribe a selected region, copy its text, and answer it with OpenAI |
+| ⌃⌥R | Copy a selected region image and answer it with OpenAI |
 | ⌘⇧S | Start session (Stream) — app must be frontmost |
 | ⌘⇧H | Show / hide overlay — global |
 | ⌘⇧P | Pause / resume — global |
 
-Region capture works without starting a listening session. Configure the API key and grant Screen
+Region capture works without starting a listening session. Configure the OpenAI API key and grant Screen
 Recording access using **Settings → General → Permissions** before using it; the shortcut does not open permission prompts. Select an area at
 least 8 × 8 points on one display. A drag crossing displays is clipped to its starting display.
 Wait for an existing answer to finish, or resume a paused session, before selecting another question.
-If another app owns ⌃⌥S, use **Capture Region and Answer** in the menu bar, or free the shortcut and restart.
+If another app owns a shortcut, use its matching menu-bar command, or free the shortcut and restart.
 
 ## Menu bar
 

@@ -15,7 +15,7 @@ struct PermissionGuideView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Permissions")
                         .font(.title2.weight(.semibold))
-                    Text("Smarty needs microphone (OpenAI speech-to-text) and screen recording for OCR. Frames stay in memory and are never saved.")
+                    Text("Smarty needs microphone access for speech-to-text and Screen Recording for screen context and screenshot commands. Captures stay in memory and are never saved.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -60,7 +60,6 @@ struct PermissionGuideView: View {
                     refreshScreenHint()
                 }
             )
-
             if let micHint, !micOK {
                 Text(micHint)
                     .font(.caption)

@@ -55,6 +55,8 @@ final class SettingsStore {
         }
 
         migrateOverlayFontSizeIfNeeded()
+        migrateDefaultOpenAIModelIfNeeded()
+        migrateUnsetSoftwareRoleIfNeeded()
         reloadAPIKeysFromKeychain()
     }
 
@@ -118,6 +120,29 @@ final class SettingsStore {
         if settings.overlayFontSize <= 14 {
             update { $0.overlayFontSize = 17 }
         }
+    }
+
+    /// Older builds defaulted Field to software engineering, so annotation (and every other non-SWE)
+    /// interview got coding answers until someone found the picker. One-shot: empty briefs move to general.
+    private func migrateUnsetSoftwareRoleIfNeeded() {
+        let flagKey = "smarty.migratedUnsetRoleToGeneral"
+        guard !defaults.bool(forKey: flagKey) else { return }
+        defaults.set(true, forKey: flagKey)
+        let role = settings.roleProfile
+        let unsetSoftware = role.title.isBlank && role.notes.isBlank
+            && role.field == .software && role.codingPreference == .auto
+        guard unsetSoftware else { return }
+        update { $0.roleProfile.field = .general }
+    }
+
+    /// Move installations that still use the former OpenAI default onto GPT-5.6 Sol.
+    /// Explicitly selected non-default models and other providers are left untouched.
+    private func migrateDefaultOpenAIModelIfNeeded() {
+        let flagKey = "smarty.migratedDefaultModelGPT56Sol"
+        guard !defaults.bool(forKey: flagKey) else { return }
+        defaults.set(true, forKey: flagKey)
+        guard settings.provider == .openAI, settings.model == "gpt-4o-mini" else { return }
+        update { $0.model = AppSettings.defaultOpenAIAnswerModel }
     }
 
     func clearHistory() {

@@ -88,15 +88,23 @@ actor ScreenCaptureService: ScreenCapturing {
         let excluded = content.applications.filter { $0.bundleIdentifier == Bundle.main.bundleIdentifier }
         let filter = SCContentFilter(display: display, excludingApplications: excluded, exceptingWindows: [])
         let scale = CGFloat(filter.pointPixelScale)
-        let source = try ScreenRegionGeometry.captureRect(rect, displaySize: filter.contentRect.size, scale: scale)
         let config = SCStreamConfiguration()
-        config.sourceRect = source
-        config.width = max(1, Int((source.width * scale).rounded()))
-        config.height = max(1, Int((source.height * scale).rounded()))
+        config.width = max(1, Int((filter.contentRect.width * scale).rounded()))
+        config.height = max(1, Int((filter.contentRect.height * scale).rounded()))
         config.showsCursor = false
         config.capturesAudio = false
         try Task.checkCancellation()
-        return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+        let fullImage = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+        try Task.checkCancellation()
+        let crop = try ScreenRegionGeometry.pixelCropRect(
+            rect,
+            displaySize: filter.contentRect.size,
+            imageSize: CGSize(width: fullImage.width, height: fullImage.height)
+        )
+        guard let cropped = fullImage.cropping(to: crop), cropped.width > 0, cropped.height > 0 else {
+            throw ScreenCaptureError.imageEncodingFailed
+        }
+        return cropped
     }
 
     private func shareableContent(forceRefresh: Bool) async throws -> SCShareableContent {

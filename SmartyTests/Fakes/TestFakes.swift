@@ -183,10 +183,13 @@ actor FakeOpenAI: OpenAIClienting {
     private(set) var streamCallCount = 0
     private(set) var answerCompleteCallCount = 0
     private(set) var lastRequest: OpenAIRequest?
+    private(set) var completeRequests: [OpenAIRequest] = []
+    private(set) var lastAPIKey: String?
     private(set) var imageRequests: [OpenAIRequest] = []
 
     func streamResponse(apiKey: String, request: OpenAIRequest) -> AsyncThrowingStream<String, Error> {
         streamCallCount += 1
+        lastAPIKey = apiKey
         lastRequest = request
         let deltas = self.deltas
         let error = self.error
@@ -205,7 +208,9 @@ actor FakeOpenAI: OpenAIClienting {
     }
 
     func complete(apiKey: String, request: OpenAIRequest) async throws -> String {
+        lastAPIKey = apiKey
         lastRequest = request
+        completeRequests.append(request)
         if !request.images.isEmpty { imageRequests.append(request) }
         if let error { throw error }
         // Key-terms extraction expects JSON; do not count as an answer request.

@@ -75,6 +75,7 @@ final class OpenAIClientTests: XCTestCase {
 
     func testSupportsTemperatureHelper() {
         XCTAssertTrue(AIProvider.openAI.supportsTemperature("gpt-4o-mini"))
+        XCTAssertFalse(AIProvider.openAI.supportsTemperature("gpt-5.6-sol"))
         XCTAssertFalse(AIProvider.openAI.supportsTemperature("o4-mini"))
         XCTAssertFalse(AIProvider.openAI.supportsTemperature("o1-preview"))
     }

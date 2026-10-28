@@ -318,6 +318,16 @@ struct OverlaySettingsSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
+                Toggle("Overlay over high-level windows", isOn: Binding(
+                    get: { store.settings.overlayAboveEverything },
+                    set: { value in
+                        appEnvironment.overlayManager.setAboveEverything(value, session: appEnvironment.session)
+                    }
+                ))
+                Text("Off by default. Helps with full-screen and borderless apps that allow other apps to run. Single-app kiosk or assessment mode can stop Cueglass and block its launch; this setting cannot override that restriction.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Toggle("Status blink", isOn: Binding(
                     get: { store.settings.statusBlinkEnabled },
                     set: { value in
@@ -346,8 +356,11 @@ struct OverlaySettingsSection: View {
             }
 
             Section("Shortcuts") {
-                LabeledContent("Capture Region and Answer", value: "⌃⌥S")
-                Text("Press Control–Option–S, drag over a question, and release to answer. Escape cancels. Screen Recording access must already be enabled.")
+                LabeledContent("Solve Screen with OpenAI", value: "⌃⌥S")
+                LabeledContent("Answer Region with OpenAI", value: "⌃⌥A")
+                LabeledContent("Copy Region Text & Answer with OpenAI", value: "⌃⌥C")
+                LabeledContent("Copy Region Image & Answer", value: "⌃⌥R")
+                Text("These commands send the selected screenshot directly to OpenAI without Apple OCR. Escape cancels before anything is copied or uploaded. Screen Recording access must already be enabled.")
                 LabeledContent("Show / Hide Overlay", value: "⌘⇧H")
                 LabeledContent("Pause / Resume", value: "⌘⇧P")
                 LabeledContent("Start Session", value: "⌘⇧S")
@@ -363,7 +376,7 @@ struct PromptSettingsSection: View {
 
     var body: some View {
         Form {
-            Section("Role You're Interviewing For") {
+            Section("Interview Field") {
                 RoleFields(store: store)
             }
 

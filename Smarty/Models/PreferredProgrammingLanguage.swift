@@ -62,15 +62,32 @@ enum InterviewFocus: String, Codable, CaseIterable, Sendable, Identifiable {
     }
 
     var promptGuidance: String {
+        promptGuidance(expectsCoding: true)
+    }
+
+    /// Mixed/coding presets assume a software interview unless the role says otherwise.
+    func promptGuidance(expectsCoding: Bool) -> String {
+        if expectsCoding {
+            switch self {
+            case .behavioral:
+                return "Session focus: behavioral. Prefer STAR-style spoken stories; de-emphasize code unless asked."
+            case .coding:
+                return "Session focus: coding / algorithms. Prefer approaches, complexity, and fenced code; keep behavioral stories short."
+            case .systemDesign:
+                return "Session focus: system design. Emphasize requirements, tradeoffs, components, data flow, and scaling; light code only when useful."
+            case .mixed:
+                return "Session focus: mixed. Match the answer style to whether the question is behavioral, coding, or system design."
+            }
+        }
         switch self {
         case .behavioral:
-            return "Session focus: behavioral. Prefer STAR-style spoken stories; de-emphasize code unless asked."
+            return "Session focus: behavioral. Prefer STAR-style spoken stories using this role's vocabulary."
         case .coding:
-            return "Session focus: coding / algorithms. Prefer approaches, complexity, and fenced code; keep behavioral stories short."
+            return "Session focus was set to coding, but this is not a software-engineering interview. Only include code if the interviewer explicitly asks. Otherwise answer with this role's own methods."
         case .systemDesign:
-            return "Session focus: system design. Emphasize requirements, tradeoffs, components, data flow, and scaling; light code only when useful."
+            return "If they ask how a system or process works, describe this role's workflows — not software architecture, APIs, or scaling."
         case .mixed:
-            return "Session focus: mixed. Match the answer style to whether the question is behavioral, coding, or system design."
+            return "Session focus: mixed for this role. Match the question using this field's vocabulary. Do not slip into software-engineering answers (algorithms, Big-O, LeetCode, system design) unless they explicitly ask."
         }
     }
 }

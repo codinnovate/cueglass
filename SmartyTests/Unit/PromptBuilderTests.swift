@@ -66,7 +66,8 @@ final class PromptBuilderTests: XCTestCase {
             snapshot: snapshot,
             preferredLanguage: .swift,
             interviewFocus: .coding,
-            answerLength: .concise
+            answerLength: .concise,
+            role: RoleProfile(title: "Backend Engineer", field: .software)
         )
         XCTAssertTrue(withSwift.instructions.contains("prefer Swift"))
         XCTAssertTrue(withSwift.instructions.contains("Session focus: coding"))
@@ -93,9 +94,7 @@ final class PromptBuilderTests: XCTestCase {
             maxTokens: 2000
         )
         let role = RoleProfile(
-            title: "Senior Product Manager",
             field: .product,
-            company: "Acme",
             notes: "Marketplace team, heavy on experimentation."
         )
         let prompt = builder.build(
@@ -107,7 +106,6 @@ final class PromptBuilderTests: XCTestCase {
             role: role
         )
 
-        XCTAssertTrue(prompt.instructions.contains("Senior Product Manager at Acme"))
         XCTAssertTrue(prompt.instructions.contains("Field: product management"))
         XCTAssertTrue(prompt.instructions.contains("Marketplace team"))
         // Non-technical role: no language preference, no coding mandate.
@@ -170,6 +168,33 @@ final class PromptBuilderTests: XCTestCase {
         // Auto still follows the field.
         XCTAssertTrue(RoleProfile(field: .software).expectsCoding)
         XCTAssertFalse(RoleProfile(field: .generalist).expectsCoding)
+        XCTAssertFalse(RoleProfile().expectsCoding)
+    }
+
+    func testAnnotationPromptOverridesDefaultSoftwareField() {
+        let leftoverSoftwarePicker = RoleProfile(
+            field: .software,
+            notes: "This is an AI data annotation assessment."
+        )
+        XCTAssertEqual(leftoverSoftwarePicker.effectiveField, .dataAnnotation)
+        XCTAssertFalse(leftoverSoftwarePicker.expectsCoding)
+        XCTAssertTrue(leftoverSoftwarePicker.promptGuidance.contains("data annotation"))
+        XCTAssertTrue(leftoverSoftwarePicker.promptGuidance.contains("not Software engineering"))
+
+        let explicitSoftware = RoleProfile(field: .software)
+        XCTAssertEqual(explicitSoftware.effectiveField, .software)
+        XCTAssertTrue(explicitSoftware.expectsCoding)
+    }
+
+    func testMixedFocusAvoidsSoftwareFramingForAnnotation() {
+        let guidance = PromptBuilder.sessionGuidance(
+            language: .python,
+            focus: .mixed,
+            length: .standard,
+            role: RoleProfile(title: "AI Training Specialist", field: .dataAnnotation)
+        )
+        XCTAssertTrue(guidance.contains("Do not slip into software-engineering"))
+        XCTAssertFalse(guidance.contains("coding, or system design"))
     }
 
     func testEveryFieldHasGuidanceAndACategory() {
@@ -185,6 +210,10 @@ final class PromptBuilderTests: XCTestCase {
         let grouped = InterviewRoleCategory.allCases.flatMap(\.fields)
         XCTAssertEqual(grouped.count, InterviewRoleField.allCases.count)
         XCTAssertEqual(Set(grouped), Set(InterviewRoleField.allCases))
+        XCTAssertEqual(InterviewRoleField.seniorAITrainer.displayName, "Senior AI trainer")
+        XCTAssertEqual(InterviewRoleField.videoAnnotationExpert.displayName, "Video Annotation Expert")
+        XCTAssertEqual(InterviewRoleField.generalist.displayName, "Generalist")
+        XCTAssertEqual(InterviewRoleCategory.aiTraining.fields.first, .seniorAITrainer)
     }
 
     func testSessionGuidanceCarriesRole() {
@@ -194,7 +223,6 @@ final class PromptBuilderTests: XCTestCase {
             length: .concise,
             role: RoleProfile(title: "Registered Nurse", field: .healthcare)
         )
-        XCTAssertTrue(guidance.contains("Registered Nurse"))
         XCTAssertTrue(guidance.contains("Field: healthcare"))
         XCTAssertFalse(guidance.contains("prefer Python"))
     }

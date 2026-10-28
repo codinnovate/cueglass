@@ -29,4 +29,27 @@ final class ContextStoreTests: XCTestCase {
         let needs = await store.needsSummarization(maxTokens: 100)
         XCTAssertTrue(needs)
     }
+
+    func testPromptHistoryKeepsUserAndAssistantPairsOldestFirst() async {
+        let store = ContextStore()
+        await store.appendUser("first question")
+        await store.appendAssistant("first answer")
+        await store.appendUser("follow up")
+        await store.appendAssistant("second answer")
+
+        let history = await store.promptHistory()
+        XCTAssertEqual(history.map(\.role), [.user, .assistant, .user, .assistant])
+        XCTAssertEqual(history.first?.content, "first question")
+        XCTAssertEqual(history.last?.content, "second answer")
+    }
+
+    func testInitRestoresPersistedConversation() async {
+        let persisted = [
+            ConversationMessage(role: .user, content: "prior q"),
+            ConversationMessage(role: .assistant, content: "prior a")
+        ]
+        let store = ContextStore(conversation: persisted)
+        let history = await store.promptHistory()
+        XCTAssertEqual(history.map(\.content), ["prior q", "prior a"])
+    }
 }

@@ -23,8 +23,8 @@ final class RegionSelectionController {
                 backing: .buffered, defer: false
             )
             panel.sharingType = blindMode ? .none : .readWrite
-            panel.level = .screenSaver
-            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .transient]
+            panel.level = OverlayWindowTier.regionPicker
+            panel.collectionBehavior = [.canJoinAllSpaces, .canJoinAllApplications, .fullScreenAuxiliary, .stationary, .ignoresCycle]
             panel.backgroundColor = .clear
             panel.isOpaque = false
             panel.hasShadow = false

@@ -23,7 +23,7 @@ actor OCRService: OCRProcessing {
     private var lastTextNormalized: String?
 
     func recognizeText(in image: CGImage, accuracy: OCRAccuracy = .fast) async throws -> String? {
-        let workingImage = downscaleIfNeeded(image, maxDimension: accuracy == .accurate ? 1800 : 1280)
+        let workingImage = downscaleIfNeeded(image, maxDimension: accuracy == .accurate ? 2600 : 1280)
         let hash = workingImage.averageLumaSample
         if let lastFrameHash, lastFrameHash == hash {
             return nil
@@ -85,7 +85,11 @@ actor OCRService: OCRProcessing {
                 box.resume(.success(lines.joined(separator: "\n")))
             }
             request.recognitionLevel = accuracy == .accurate ? .accurate : .fast
-            request.usesLanguageCorrection = accuracy == .accurate
+            // Language correction "fixes" code identifiers into dictionary words
+            // (e.g. usr_id -> user) — never worth it for screenshots of code.
+            request.usesLanguageCorrection = false
+            request.automaticallyDetectsLanguage = false
+            request.recognitionLanguages = ["en-US"]
 
             let handler = VNImageRequestHandler(cgImage: image, options: [:])
             do {

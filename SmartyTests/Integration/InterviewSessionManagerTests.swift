@@ -1,5 +1,6 @@
 import XCTest
 import CoreGraphics
+import AppKit
 @testable import Smarty
 
 @MainActor
@@ -70,7 +71,27 @@ final class InterviewSessionManagerTests: XCTestCase {
         let last = await openAI.lastRequest
         XCTAssertEqual(last?.stream, false)
         XCTAssertFalse(manager.isListenArmed)
-        XCTAssertEqual(manager.history.count, 1)
+        XCTAssertEqual(manager.history.count, 2)
+        XCTAssertEqual(manager.history.map(\.role), [.user, .assistant])
+    }
+
+    func testFollowUpSendsPriorQuestionAndAnswer() async {
+        await manager.askTyped("How do you handle ambiguous guidelines?")
+        await waitUntil(timeout: 2) { self.manager.answeredTurns.count == 1 }
+
+        await openAI.setDeltas(["Follow up answer"])
+        await manager.askTyped("Give an example from that last answer")
+        await waitUntil(timeout: 2) { self.manager.answeredTurns.count == 2 }
+
+        let requests = await openAI.completeRequests
+        let technical = requests.filter {
+            $0.instructions.localizedCaseInsensitiveContains("discreet interview assistant")
+        }
+        XCTAssertGreaterThanOrEqual(technical.count, 2)
+        let followUp = technical[1]
+        XCTAssertTrue(followUp.history.contains { $0.role == .user && $0.content.localizedCaseInsensitiveContains("ambiguous") })
+        XCTAssertTrue(followUp.history.contains { $0.role == .assistant && $0.content.contains("Hello world") })
+        XCTAssertTrue(followUp.instructions.localizedCaseInsensitiveContains("stay consistent"))
     }
 
     func testForceRegenerateBypassesThrottle() async {
@@ -106,7 +127,6 @@ final class InterviewSessionManagerTests: XCTestCase {
     }
 
     func testScreenshotDoesNotFakeSpeechRunningThenListenWorks() async {
-        await ocr.setText("Implement binary search")
         await capture.setFrame(Self.makeCGImage())
 
         await manager.screenshotSolve()
@@ -121,18 +141,25 @@ final class InterviewSessionManagerTests: XCTestCase {
         XCTAssertTrue(manager.isListenArmed)
     }
 
-    func testScreenshotEmptyOCRErrorsThenRecovers() async {
-        await ocr.setText(nil)
+    func testScreenshotSendsImageDirectlyToOpenAIWithoutOCR() async {
+        _ = settingsStore.saveAPIKey("sk-anthropic", for: .anthropic)
+        settingsStore.update {
+            $0.provider = .anthropic
+            $0.model = "claude-sonnet-5"
+        }
+        await ocr.setShouldFail(true)
         await capture.setFrame(Self.makeCGImage())
         await manager.screenshotSolve()
+        await waitUntil(timeout: 2) { !self.manager.currentAnswer.isEmpty }
 
-        guard case .error = manager.status else {
-            return XCTFail("Expected OCR empty error")
-        }
-        await waitUntil(timeout: 3) {
-            if case .error = self.manager.status { return false }
-            return true
-        }
+        let requests = await openAI.imageRequests
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests.first?.provider, .openAI)
+        XCTAssertEqual(requests.first?.model, AppSettings.defaultOpenAIAnswerModel)
+        XCTAssertEqual(requests.first?.images.count, 1)
+        let lastAPIKey = await openAI.lastAPIKey
+        XCTAssertEqual(lastAPIKey, "sk-test")
+        XCTAssertEqual(manager.answeredTurns.first?.question, "Solve what's on screen")
     }
 
     func testSpeechOnlyDoesNotAutoAnswerUnlessArmed() async {
@@ -192,7 +219,8 @@ final class InterviewSessionManagerTests: XCTestCase {
         }
 
         let calls = await openAI.callCount()
-        XCTAssertGreaterThanOrEqual(calls, 4)
+        // Q1 technical + Q1 friendly + Q2 technical; Q2 friendly may still be in flight when the UI unlocks.
+        XCTAssertGreaterThanOrEqual(calls, 3)
         XCTAssertEqual(manager.answeredTurns.count, 2)
         XCTAssertEqual(manager.answeredTurns[0].index, 1)
         XCTAssertEqual(manager.answeredTurns[1].index, 2)
@@ -347,7 +375,12 @@ final class InterviewSessionManagerTests: XCTestCase {
 
     func testRegionQuestionSendsImageWithoutOCRAndPreservesAttachments() async throws {
         await capture.setFrame(Self.makeCGImage())
-        await ocr.setText(nil)
+        await ocr.setShouldFail(true)
+        _ = settingsStore.saveAPIKey("sk-anthropic", for: .anthropic)
+        settingsStore.update {
+            $0.provider = .anthropic
+            $0.model = "claude-sonnet-5"
+        }
         let pending = ImageAttachment(data: Data([1, 2, 3]), mimeType: .png)
         _ = manager.addImage(pending)
         let id = try XCTUnwrap(manager.beginRegionCapture())
@@ -356,6 +389,8 @@ final class InterviewSessionManagerTests: XCTestCase {
 
         let requests = await openAI.imageRequests
         XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests.first?.provider, .openAI)
+        XCTAssertEqual(requests.first?.model, AppSettings.defaultOpenAIAnswerModel)
         XCTAssertEqual(requests.first?.images.count, 1)
         XCTAssertNotNil(requests.first?.images.first?.makeCGImage())
         XCTAssertTrue(requests.first?.input.contains("selected screenshot") == true)
@@ -366,9 +401,11 @@ final class InterviewSessionManagerTests: XCTestCase {
         XCTAssertEqual(permissions.screenRequestCount, 0)
         let captured = await capture.regionRequests
         XCTAssertEqual(captured, [testRegion])
+        let ocrResetCount = await ocr.resetCount
+        XCTAssertEqual(ocrResetCount, 0)
     }
 
-    func testRegionOCRFailureStillSendsImage() async throws {
+    func testRegionNeverInvokesAppleOCR() async throws {
         await capture.setFrame(Self.makeCGImage())
         await ocr.setShouldFail(true)
         let id = try XCTUnwrap(manager.beginRegionCapture())
@@ -376,17 +413,96 @@ final class InterviewSessionManagerTests: XCTestCase {
         await waitUntil(timeout: 2) { !self.manager.currentAnswer.isEmpty }
         let requests = await openAI.imageRequests
         XCTAssertEqual(requests.count, 1)
+        let ocrResetCount = await ocr.resetCount
+        XCTAssertEqual(ocrResetCount, 0)
     }
 
-    func testRegionOCRIncludedWithImage() async throws {
+    func testRegionIgnoresLocalOCRTextAndUsesGenericQuestion() async throws {
         await capture.setFrame(Self.makeCGImage())
         await ocr.setText("Find the area of this triangle")
         let id = try XCTUnwrap(manager.beginRegionCapture())
         await manager.solveSelectedRegion(testRegion, captureID: id)
         await waitUntil(timeout: 2) { !self.manager.currentAnswer.isEmpty }
         let requests = await openAI.imageRequests
-        XCTAssertTrue(requests.first?.input.contains("Find the area of this triangle") == true)
-        XCTAssertEqual(manager.answeredTurns.first?.question, "Find the area of this triangle")
+        XCTAssertFalse(requests.first?.input.contains("Find the area of this triangle") == true)
+        XCTAssertEqual(manager.answeredTurns.first?.question, "Selected screenshot question")
+        let ocrResetCount = await ocr.resetCount
+        XCTAssertEqual(ocrResetCount, 0)
+    }
+
+    func testCopyRegionTextUsesOpenAIVisionCopiesPlainTextAndAnswers() async throws {
+        await capture.setFrame(Self.makeCGImage())
+        await ocr.setShouldFail(true)
+        await openAI.setDeltas(["first line\n    indented code"])
+        _ = settingsStore.saveAPIKey("sk-anthropic", for: .anthropic)
+        settingsStore.update { $0.provider = .anthropic }
+        NSPasteboard.general.clearContents()
+
+        let id = try XCTUnwrap(manager.beginCopyRegionCapture())
+        await manager.copyRegionTextToClipboard(testRegion, captureID: id)
+        await waitUntil(timeout: 2) { !self.manager.currentAnswer.isEmpty }
+
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "first line\n    indented code")
+        let requests = await openAI.imageRequests
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(requests.first?.provider, .openAI)
+        XCTAssertTrue(requests.first?.instructions.contains("Return only the transcribed") == true)
+        XCTAssertEqual(requests.first?.model, AppSettings.defaultOpenAIAnswerModel)
+        XCTAssertEqual(requests.last?.provider, .openAI)
+        XCTAssertEqual(requests.last?.model, AppSettings.defaultOpenAIAnswerModel)
+        XCTAssertTrue(requests.last?.input.contains("For mathematics") == true)
+        XCTAssertEqual(manager.answeredTurns.first?.question, "first line\n    indented code")
+        let lastAPIKey = await openAI.lastAPIKey
+        XCTAssertEqual(lastAPIKey, "sk-test")
+        let ocrResetCount = await ocr.resetCount
+        XCTAssertEqual(ocrResetCount, 0)
+    }
+
+    func testCopyRegionImageCopiesPixelsAndAnswersWithOpenAI() async throws {
+        await capture.setFrame(Self.makeCGImage())
+        await ocr.setShouldFail(true)
+        _ = settingsStore.saveAPIKey("sk-gemini", for: .gemini)
+        settingsStore.update {
+            $0.provider = .gemini
+            $0.model = "gemini-2.5-flash"
+        }
+        NSPasteboard.general.clearContents()
+
+        let id = try XCTUnwrap(manager.beginCopyRegionImageCapture())
+        await manager.copyRegionImageToClipboard(testRegion, captureID: id)
+        await waitUntil(timeout: 2) { !self.manager.currentAnswer.isEmpty }
+
+        XCTAssertTrue(NSPasteboard.general.canReadObject(forClasses: [NSImage.self]))
+        let requests = await openAI.imageRequests
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests.first?.provider, .openAI)
+        let lastAPIKey = await openAI.lastAPIKey
+        XCTAssertEqual(lastAPIKey, "sk-test")
+        let ocrResetCount = await ocr.resetCount
+        XCTAssertEqual(ocrResetCount, 0)
+    }
+
+    func testCopyRegionImagePreservesClipboardWhenOpenAIFails() async throws {
+        await capture.setFrame(Self.makeCGImage())
+        await openAI.setError(URLError(.notConnectedToInternet))
+        NSPasteboard.general.clearContents()
+
+        let id = try XCTUnwrap(manager.beginCopyRegionImageCapture())
+        await manager.copyRegionImageToClipboard(testRegion, captureID: id)
+        await waitUntil(timeout: 2) { self.manager.lastErrorMessage != nil }
+
+        XCTAssertTrue(NSPasteboard.general.canReadObject(forClasses: [NSImage.self]))
+    }
+
+    func testEveryRegionCommandRequiresOpenAIKey() {
+        _ = settingsStore.saveAPIKey("sk-anthropic", for: .anthropic)
+        settingsStore.update { $0.provider = .anthropic }
+        _ = settingsStore.saveAPIKey("", for: .openAI)
+
+        XCTAssertNil(manager.beginRegionCapture())
+        XCTAssertNil(manager.beginCopyRegionCapture())
+        XCTAssertNil(manager.beginCopyRegionImageCapture())
+        XCTAssertTrue(manager.lastErrorMessage?.contains("OpenAI API key") == true)
     }
 
     func testRegionPreflightReportsMissingSetupWithoutPrompting() {
